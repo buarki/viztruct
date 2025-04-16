@@ -1,24 +1,41 @@
-# StructViz - go struct memory layout visualizer
+# viztruct - go struct memory layout visualizer
 
-GO = go
-GOFLAGS = 
-WASM_DIR = ./web
-DIST_DIR = ./dist
-BINARY_NAME = viztruct
-SERVER_PORT = 8080
+GOCMD=go
+GOBUILD=$(GOCMD) build
+GOCLEAN=$(GOCMD) clean
+GOFMT=$(GOCMD) fmt
+GOTEST=$(GOCMD) test
+GOOS=js
+GOARCH=wasm
 
-.PHONY: all check-tools test
+CLI_NAME=viztruct
+WASM_BINARY_NAME=main.wasm
+OUTPUT_DIR=static
+SRC_DIR=cmd/server
+WASM_EXEC_PATH=/usr/local/go/lib/wasm/wasm_exec.js
 
-all: check-tools clean build wasm
-
-check-tools:
-	@echo "Checking required tools..."
-	@which $(GO) > /dev/null || (echo "Go is not installed. Please install Go first."; exit 1)
-
-test:
-	@echo "Running tests..."
-	$(GO) test ./...
+build-wasm:
+	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -o $(OUTPUT_DIR)/$(WASM_BINARY_NAME) ./$(SRC_DIR)
 
 build-cli:
-	$(GO) build -o $(BINARY_NAME) cmd/main.go
+	$(GO) build -o $(WASM_BINARY_NAME) cmd/main.go
 
+clean:
+	$(GOCLEAN)
+	rm -f $(OUTPUT_DIR)/$(WASM_BINARY_NAME)
+
+wasm-exec:
+	cp $(WASM_EXEC_PATH) ./static
+
+fmt:
+	$(GOFMT) ./...
+
+test:
+	$(GOTEST) ./structi/... ./svg/...
+
+serve:
+	npx http-server ./static --cors
+
+all: clean build-wasm build-cli
+
+.PHONY: build-wasm clean fmt test serve all
