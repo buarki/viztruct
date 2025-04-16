@@ -1,3 +1,6 @@
+![Go Tests](https://github.com/buarki/viztruct/actions/workflows/tests.yml/badge.svg) [![Vercel Deploy](https://deploy-badge.vercel.app/vercel/viztruct)](https://viztruct.vercel.app/)
+
+
 # viztruct
 
 ## Cli
