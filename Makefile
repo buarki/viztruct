@@ -4,7 +4,7 @@ GO = go
 GOFLAGS = 
 WASM_DIR = ./web
 DIST_DIR = ./dist
-BINARY_NAME = structviz
+BINARY_NAME = viztruct
 SERVER_PORT = 8080
 
 .PHONY: all check-tools test
@@ -19,4 +19,6 @@ test:
 	@echo "Running tests..."
 	$(GO) test ./...
 
+build-cli:
+	$(GO) build -o $(BINARY_NAME) cmd/main.go
 

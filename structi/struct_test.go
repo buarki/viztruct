@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestGetTotalSize(t *testing.T) {
+func TestTotalSize(t *testing.T) {
 	tests := []struct {
 		name   string
 		fields []Field
@@ -50,7 +50,8 @@ func TestGetTotalSize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getTotalSize(tt.fields)
+			info := Info{Fields: tt.fields}
+			got := info.TotalSize()
 			if got != tt.want {
 				t.Errorf("expected %d, got %d", tt.want, got)
 			}
@@ -58,12 +59,12 @@ func TestGetTotalSize(t *testing.T) {
 	}
 }
 
-func TestCalcWastedSpace(t *testing.T) {
+func TestWastedSpace(t *testing.T) {
 	tests := []struct {
-		name         string
-		fields       []Field
-		wantBytes    int64
-		wantPercent  float64
+		name        string
+		fields      []Field
+		wantBytes   int64
+		wantPercent float64
 	}{
 		{
 			name:        "no fields",
@@ -106,7 +107,8 @@ func TestCalcWastedSpace(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotBytes, gotPercent := calcWastedSpace(tt.fields)
+			info := Info{Fields: tt.fields}
+			gotBytes, gotPercent := info.WastedSpace()
 
 			if gotBytes != tt.wantBytes {
 				t.Errorf("wastedBytes = %d, want %d", gotBytes, tt.wantBytes)
@@ -118,7 +120,6 @@ func TestCalcWastedSpace(t *testing.T) {
 		})
 	}
 }
-
 
 func TestCalculateLayout(t *testing.T) {
 	const src = `
@@ -153,7 +154,8 @@ type MyStruct struct {
 	}
 
 	sizes := types.StdSizes{WordSize: 8, MaxAlign: 8}
-	fields := calculateLayout(structType, &sizes)
+	info := Info{}
+	fields := info.calculateLayout(structType, &sizes)
 
 	expected := []Field{
 		{Name: "A", Offset: 0, Size: 1, Align: 1, IsPadding: false},
@@ -172,7 +174,6 @@ type MyStruct struct {
 		}
 	}
 }
-
 
 func TestOptimizeStructLayout(t *testing.T) {
 	tests := []struct {
@@ -242,7 +243,8 @@ func TestOptimizeStructLayout(t *testing.T) {
 			}
 
 			sizes := types.StdSizes{WordSize: 8, MaxAlign: 8}
-			fields := optimizeStructLayout(structType, &sizes)
+			info := Info{}
+			fields := info.optimizeStructLayout(structType, &sizes)
 
 			if len(fields) != len(tt.expected) {
 				t.Fatalf("unexpected field count: got %d, want %d", len(fields), len(tt.expected))
@@ -257,7 +259,6 @@ func TestOptimizeStructLayout(t *testing.T) {
 		})
 	}
 }
-
 
 func TestAnalyzeNestedStructs(t *testing.T) {
 	tests := []struct {
@@ -343,7 +344,3 @@ func TestAnalyzeNestedStructs(t *testing.T) {
 		})
 	}
 }
-
-
-
-
