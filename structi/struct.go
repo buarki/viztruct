@@ -31,23 +31,31 @@ func typeName(t types.Type) string {
 	return t.String()
 }
 
-func getTotalSize(fields []Field) int64 {
-	if len(fields) == 0 {
+func (i Info) TotalSize() int64 {
+	if len(i.Fields) == 0 {
 		return 0
 	}
-	last := fields[len(fields)-1]
+	last := i.Fields[len(i.Fields)-1]
 	return last.Offset + last.Size
 }
 
-func calcWastedSpace(fields []Field) (int64, float64) {
+func (i Info) OptimazedTotalSize() int64 {
+	if len(i.OptimizedFields) == 0 {
+		return 0
+	}
+	last := i.OptimizedFields[len(i.OptimizedFields)-1]
+	return last.Offset + last.Size
+}
+
+func (i Info) WastedSpace() (int64, float64) {
 	var wastedBytes int64
-	for _, f := range fields {
+	for _, f := range i.Fields {
 		if f.IsPadding {
 			wastedBytes += f.Size
 		}
 	}
 
-	totalSize := getTotalSize(fields)
+	totalSize := i.TotalSize()
 	if totalSize == 0 {
 		return 0, 0
 	}
@@ -56,7 +64,24 @@ func calcWastedSpace(fields []Field) (int64, float64) {
 	return wastedBytes, wastedPercent
 }
 
-func calculateLayout(structType *types.Struct, sizes types.Sizes) []Field {
+func (i Info) OptimazedWastedSpace() (int64, float64) {
+	var wastedBytes int64
+	for _, f := range i.OptimizedFields {
+		if f.IsPadding {
+			wastedBytes += f.Size
+		}
+	}
+
+	totalSize := i.TotalSize()
+	if totalSize == 0 {
+		return 0, 0
+	}
+
+	wastedPercent := float64(wastedBytes) / float64(totalSize) * 100
+	return wastedBytes, wastedPercent
+}
+
+func (i Info) calculateLayout(structType *types.Struct, sizes types.Sizes) []Field {
 	var fields []Field
 	offset := int64(0)
 
@@ -115,7 +140,7 @@ func calculateLayout(structType *types.Struct, sizes types.Sizes) []Field {
 	return fields
 }
 
-func optimizeStructLayout(structType *types.Struct, sizes types.Sizes) []Field {
+func (i Info) optimizeStructLayout(structType *types.Struct, sizes types.Sizes) []Field {
 	type fieldWithMeta struct {
 		name  string
 		typ   types.Type
@@ -225,12 +250,24 @@ func AnalyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, f
 			return true // not a struct type
 		}
 
-		fields := calculateLayout(underlyingType, sizes)
-		optimizedFields := optimizeStructLayout(underlyingType, sizes)
+		tempInfo := Info{}
+		fields := tempInfo.calculateLayout(underlyingType, sizes)
+		optimizedFields := tempInfo.optimizeStructLayout(underlyingType, sizes)
 
-		originalSize := getTotalSize(fields)
-		optimizedSize := getTotalSize(optimizedFields)
-		wastedBytes, wastedPercent := calcWastedSpace(fields)
+		// Calculate sizes using the fields directly
+		originalSize := int64(0)
+		if len(fields) > 0 {
+			last := fields[len(fields)-1]
+			originalSize = last.Offset + last.Size
+		}
+
+		optimizedSize := int64(0)
+		if len(optimizedFields) > 0 {
+			last := optimizedFields[len(optimizedFields)-1]
+			optimizedSize = last.Offset + last.Size
+		}
+
+		wastedBytes, wastedPercent := tempInfo.WastedSpace()
 
 		structInfo := Info{
 			Name:            typeSpec.Name.Name,
@@ -249,5 +286,3 @@ func AnalyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, f
 
 	return structInfos
 }
-
-
