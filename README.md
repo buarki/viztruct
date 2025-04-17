@@ -5,28 +5,30 @@
 
 ## CLI
 
-- build it:
-
+Build the CLI:
 ```sh
 make build-cli
 ```
 
-- it accepts the structs to analyse via stdin or via pipe:
-
+Usage:
 ```sh
-./viztruct 'type ComplexStruct struct { Name     string; ID       uint64; Active   bool; Count    int32; Flags    byte; Value    float64; Reserved bool }'
+# Analyze a struct from command line
+./viztruct --struct 'type MyStruct struct { A int8; B int32 }'
+
+# Analyze structs from a file
+./viztruct --file structs.go
+
+# Get JSON output
+./viztruct --format json --struct 'type MyStruct struct { A int8; B int32 }'
+
+# Generate SVG visualization
+./viztruct --svg --struct 'type MyStruct struct { A int8; B int32 }'
+
+# Show help
+./viztruct --help
 ```
 
-or 
-
-```sh
-echo 'type MyStruct struct {
-  A int8
-  B int32
-}' | ./viztruct
-```
-
-- it will give you a padding summary and also generate an svg image of the input and optimized struct.
+The tool will print the struct layout analysis to stdout. Use the `--svg` flag to generate an SVG visualization.
 
 ## Website
 

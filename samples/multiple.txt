@@ -1,0 +1,11 @@
+type Pet struct {
+  Name string
+  Age int
+}
+
+type User struct {
+  ID string
+  Name string
+  Pet Pet
+
+}
