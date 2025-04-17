@@ -3,6 +3,12 @@
 
 # viztruct
 
+
+![Image](./docs/demo.gif)
+SVG visualization:
+
+![Image](./docs/demo.png)
+
 ## CLI
 
 Build the CLI:
@@ -16,7 +22,7 @@ Usage:
 ./viztruct --struct 'type MyStruct struct { A int8; B int32 }'
 
 # Analyze structs from a file
-./viztruct --file structs.go
+./viztruct --file ./samples/bad-layout.txt
 
 # Get JSON output
 ./viztruct --format json --struct 'type MyStruct struct { A int8; B int32 }'
