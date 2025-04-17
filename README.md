@@ -3,13 +3,15 @@
 
 # viztruct
 
-## Cli
+## CLI
+
+- build it:
 
 ```sh
 make build-cli
 ```
 
-then use it:
+- it accepts the structs to analyse via stdin or via pipe:
 
 ```sh
 ./viztruct 'type ComplexStruct struct { Name     string; ID       uint64; Active   bool; Count    int32; Flags    byte; Value    float64; Reserved bool }'
@@ -23,4 +25,12 @@ echo 'type MyStruct struct {
   B int32
 }' | ./viztruct
 ```
+
+- it will give you a padding summary and also generate an svg image of the input and optimized struct.
+
+## Website
+
+If you want to use from browser just visit the [deployed webapp](https://viztruct.vercel.app). You can paste/type your struct in the text input area and get a full padding analysis.
+
+
 
