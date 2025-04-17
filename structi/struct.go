@@ -8,23 +8,23 @@ import (
 )
 
 type Info struct {
-	Name            string
-	Type            *types.Struct
-	OriginalSize    int64
-	OptimizedSize   int64
-	WastedBytes     int64
-	WastedPercent   float64
-	Fields          []Field
-	OptimizedFields []Field
+	Name            string        `json:"name"`
+	Type            *types.Struct `json:"type,omitempty,omitzero"`
+	OriginalSize    int64         `json:"original_size"`
+	OptimizedSize   int64         `json:"optimized_size"`
+	WastedBytes     int64         `json:"wasted_bytes"`
+	WastedPercent   float64       `json:"wasted_percent"`
+	Fields          []Field       `json:"fields"`
+	OptimizedFields []Field       `json:"optimized_fields"`
 }
 
 type Field struct {
-	Name      string
-	TypeName  string
-	Offset    int64
-	Size      int64
-	Align     int64
-	IsPadding bool
+	Name      string `json:"name"`
+	TypeName  string `json:"type,omitempty,omitzero"`
+	Offset    int64  `json:"offset"`
+	Size      int64  `json:"size"`
+	Align     int64  `json:"align"`
+	IsPadding bool   `json:"is_padding"`
 }
 
 func typeName(t types.Type) string {

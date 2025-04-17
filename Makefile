@@ -4,21 +4,22 @@ GOCMD=go
 GOBUILD=$(GOCMD) build
 GOCLEAN=$(GOCMD) clean
 GOFMT=$(GOCMD) fmt
-GOTEST=$(GOCMD) test
+GOTEST=$(GOCMD) test --race
 GOOS=js
 GOARCH=wasm
 
 CLI_NAME=viztruct
 WASM_BINARY_NAME=main.wasm
 OUTPUT_DIR=static
-SRC_DIR=cmd/server
+WASM_DIR=cmd/server
+CLI_DIR=cmd/cli
 WASM_EXEC_PATH=/usr/local/go/lib/wasm/wasm_exec.js
 
 build-wasm:
-	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -o $(OUTPUT_DIR)/$(WASM_BINARY_NAME) ./$(SRC_DIR)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -o $(OUTPUT_DIR)/$(WASM_BINARY_NAME) ./$(WASM_DIR)
 
 build-cli:
-	$(GO) build -o $(WASM_BINARY_NAME) cmd/main.go
+	$(GOBUILD) -o $(CLI_NAME) ./$(CLI_DIR)
 
 clean:
 	$(GOCLEAN)
@@ -30,7 +31,7 @@ wasm-exec:
 fmt:
 	$(GOFMT) ./...
 
-test:
+test: fmt
 	$(GOTEST) ./structi/... ./svg/...
 
 serve:
