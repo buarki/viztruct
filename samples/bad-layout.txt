@@ -1,8 +1,6 @@
 type BadLayout struct {
-	Active    bool
-	ID        uint64
-	Confirmed bool
-	Age       uint32
-	Kids      uint16
-	Parents   int
+    Active    bool
+    ID        uint64
+    Confirmed bool
+    Age       uint32
 }
