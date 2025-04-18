@@ -32,7 +32,7 @@ func analyzeStructs(input string, format OutputFormat, generateSVG bool) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "input.go", src, parser.AllErrors)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing input: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error parsing input: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -44,7 +44,7 @@ func analyzeStructs(input string, format OutputFormat, generateSVG bool) {
 
 	_, err = conf.Check("main", fset, []*ast.File{file}, info)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error type checking: %v\n", err)
+		fmt.Fprintf(os.Stderr, "error type checking: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -52,19 +52,22 @@ func analyzeStructs(input string, format OutputFormat, generateSVG bool) {
 	structs := structi.AnalyzeNestedStructs(file, &sizes, info, fset)
 
 	if generateSVG {
-		svgOutput := svg.BuildVisualization(structs)
-		err = os.WriteFile(svgFile, []byte(svgOutput), 0644)
+		svgOutput, err := svg.BuildVisualization(structs)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing SVG file: %v\n", err)
+			fmt.Fprintf(os.Stderr, "error building SVG: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("SVG visualization saved to %s\n", svgFile)
+		err = os.WriteFile(svgFile, []byte(svgOutput), 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error writing svg file: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if format == FormatJSON {
 		jsonOutput, err := json.MarshalIndent(structs, "", "  ")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+			fmt.Fprintf(os.Stderr, "error encoding json: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Println(string(jsonOutput))
@@ -148,7 +151,7 @@ func main() {
 
 	format := OutputFormat(*formatFlag)
 	if format != FormatJSON && format != FormatText {
-		fmt.Fprintf(os.Stderr, "Invalid format: %s. Use 'json' or 'txt'\n", format)
+		fmt.Fprintf(os.Stderr, "invalid format: %s. use 'json' or 'txt'\n", format)
 		os.Exit(1)
 	}
 
@@ -158,18 +161,18 @@ func main() {
 	if *fileFlag != "" {
 		input, err = readStructFromFile(*fileFlag)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading struct from file: %v\n", err)
+			fmt.Fprintf(os.Stderr, "error reading struct from file: %v\n", err)
 			os.Exit(1)
 		}
 	} else if *structFlag != "" {
 		input = *structFlag
 	} else {
-		fmt.Fprintf(os.Stderr, "Error: No struct definition provided\n")
+		fmt.Fprintf(os.Stderr, "error: no struct definition provided\n")
 		printUsage()
 	}
 
 	if input == "" {
-		fmt.Fprintf(os.Stderr, "Error: Empty struct definition\n")
+		fmt.Fprintf(os.Stderr, "error: empty struct definition\n")
 		printUsage()
 	}
 

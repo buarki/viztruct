@@ -78,7 +78,10 @@ func generateSVGAndCode(structCode string) ([]byte, []byte, error) {
 
 	structInfos := structi.AnalyzeNestedStructs(node, &customSizes, info, fset)
 
-	svgContent := svg.BuildVisualization(structInfos)
+	svgContent, err := svg.BuildVisualization(structInfos)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to build svg: %v", err)
+	}
 
 	var optimizedCode strings.Builder
 	optimizedCode.WriteString("// Optimized struct definitions:\n\n")
