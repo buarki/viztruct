@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Build
+        run: |
+          GOOS=darwin GOARCH=amd64 go build -o bin/viztruct-darwin-amd64
+          GOOS=darwin GOARCH=arm64 go build -o bin/viztruct-darwin-arm64
+          GOOS=linux GOARCH=amd64 go build -o bin/viztruct-linux-amd64
+          GOOS=linux GOARCH=arm64 go build -o bin/viztruct-linux-arm64
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            bin/viztruct-darwin-amd64
+            bin/viztruct-darwin-arm64
+            bin/viztruct-linux-amd64
+            bin/viztruct-linux-arm64
+          generate_release_notes: true
+          draft: false
+          prerelease: false 
