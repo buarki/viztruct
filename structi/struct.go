@@ -254,7 +254,7 @@ func AnalyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, f
 		fields := tempInfo.calculateLayout(underlyingType, sizes)
 		optimizedFields := tempInfo.optimizeStructLayout(underlyingType, sizes)
 
-		// Calculate sizes using the fields directly
+		// calculate sizes using the fields directly
 		originalSize := int64(0)
 		if len(fields) > 0 {
 			last := fields[len(fields)-1]
