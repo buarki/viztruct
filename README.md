@@ -9,29 +9,55 @@ SVG visualization:
 
 ![Image](./docs/demo.png)
 
-## CLI
+## CLI installation
+
+### Download binaries
+
+```sh
+ARCH="arm64" # or amd64
+OS="darwin" # or linux
+
+# get latest tag using GitHub API
+VERSION=$(curl -s "https://api.github.com/repos/buarki/viztruct/releases/latest" | jq -r .tag_name)
+
+# download binary
+BINARY_URL="https://github.com/buarki/viztruct/releases/download/$VERSION/viztruct-$OS-$ARCH"
+curl -L "$BINARY_URL" -o viztruct
+
+# install
+chmod +x viztruct
+sudo mv viztruct /usr/local/bin/
+
+# verify
+viztruct --version
+```
+
+### Build it locally
 
 Build the CLI:
 ```sh
+git clone git@github.com:buarki/viztruct.git
+cd viztruct
 make build-cli
+sudo mv viztruct /usr/local/bin/
 ```
 
-Usage:
+## Usage:
 ```sh
 # Analyze a struct from command line
-./viztruct --struct 'type MyStruct struct { A int8; B int32 }'
+viztruct --struct 'type MyStruct struct { A int8; B int32 }'
 
 # Analyze structs from a file
-./viztruct --file ./samples/bad-layout.txt
+viztruct --file ./samples/bad-layout.txt
 
 # Get JSON output
-./viztruct --format json --struct 'type MyStruct struct { A int8; B int32 }'
+viztruct --format json --struct 'type MyStruct struct { A int8; B int32 }'
 
 # Generate SVG visualization
-./viztruct --svg --struct 'type MyStruct struct { A int8; B int32 }'
+viztruct --svg --struct 'type MyStruct struct { A int8; B int32 }'
 
 # Show help
-./viztruct --help
+viztruct --help
 ```
 
 The tool will print the struct layout analysis to stdout. Use the `--svg` flag to generate an SVG visualization.

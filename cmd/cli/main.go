@@ -17,6 +17,10 @@ import (
 	"github.com/buarki/viztruct/svg"
 )
 
+var (
+	binVersion = "dev" // to be set during build
+)
+
 type OutputFormat string
 
 const (
@@ -127,6 +131,7 @@ func printUsage() {
 	fmt.Fprintf(os.Stderr, "  --struct string    Inline struct definition\n")
 	fmt.Fprintf(os.Stderr, "  --file string      Path to file containing struct definitions\n")
 	fmt.Fprintf(os.Stderr, "  --svg              Generate SVG visualization (default false)\n")
+	fmt.Fprintf(os.Stderr, "  --version          Show version information\n")
 	fmt.Fprintf(os.Stderr, "  --help             Show help message\n")
 	fmt.Fprintf(os.Stderr, "\nExamples:\n")
 	fmt.Fprintf(os.Stderr, "  %s --struct 'type MyStruct struct { a int; b string }'\n", os.Args[0])
@@ -138,14 +143,21 @@ func printUsage() {
 
 func main() {
 	formatFlag := flag.String("format", "txt", "Output format (json or txt)")
-	structFlag := flag.String("struct", "", "Inline struct definition")
+	structDef := flag.String("struct", "", "Struct definition to visualize")
 	fileFlag := flag.String("file", "", "Path to file containing struct definitions")
 	helpFlag := flag.Bool("help", false, "Show help message")
 	svgFlag := flag.Bool("svg", false, "Generate SVG visualization")
+	version := flag.Bool("version", false, "Show version information")
 
 	flag.Parse()
 
-	if *helpFlag || (len(os.Args) == 1) {
+	if *version {
+		fmt.Printf("viztruct version %s\n", binVersion)
+		os.Exit(0)
+	}
+
+	// Show help if no arguments or help flag
+	if *helpFlag || len(os.Args) == 1 {
 		printUsage()
 	}
 
@@ -164,8 +176,8 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error reading struct from file: %v\n", err)
 			os.Exit(1)
 		}
-	} else if *structFlag != "" {
-		input = *structFlag
+	} else if *structDef != "" {
+		input = *structDef
 	} else {
 		fmt.Fprintf(os.Stderr, "error: no struct definition provided\n")
 		printUsage()
