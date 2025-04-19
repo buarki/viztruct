@@ -7,6 +7,9 @@ import (
 	"go/token"
 	"go/types"
 	"math"
+	"reflect"
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -323,7 +326,10 @@ func TestAnalyzeNestedStructs(t *testing.T) {
 			}
 
 			sizes := types.StdSizes{WordSize: 8, MaxAlign: 8}
-			results := AnalyzeNestedStructs(node, &sizes, info, fset)
+			results, err := analyzeNestedStructs(node, &sizes, info, fset)
+			if err != nil {
+				t.Fatalf("error analyzing nested structs: %v", err)
+			}
 
 			if len(results) != len(tt.expectedInfo) {
 				t.Fatalf("unexpected number of structs: got %d, want %d", len(results), len(tt.expectedInfo))
@@ -340,6 +346,168 @@ func TestAnalyzeNestedStructs(t *testing.T) {
 				if results[i].OptimizedSize == 0 {
 					t.Errorf("struct[%d] optimized size should be > 0", i)
 				}
+			}
+		})
+	}
+}
+
+func TestAnalyseStructs(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantErr     bool
+		errContains string
+		validate    func(t *testing.T, infos []Info)
+	}{
+		{
+			name: "basic struct",
+			input: `type Basic struct {
+				A int64
+				B int32
+				C bool
+			}`,
+			validate: func(t *testing.T, infos []Info) {
+				if len(infos) != 1 {
+					t.Fatalf("expected 1 struct, got %d", len(infos))
+				}
+				if infos[0].Name != "Basic" {
+					t.Errorf("expected struct name 'Basic', got %q", infos[0].Name)
+				}
+				var nonPaddingFields int
+				for _, f := range infos[0].Fields {
+					if !f.IsPadding {
+						nonPaddingFields++
+					}
+				}
+				if nonPaddingFields != 3 {
+					t.Errorf("expected 3 non-padding fields, got %d", nonPaddingFields)
+				}
+			},
+		},
+		{
+			name: "multiple structs",
+			input: `
+			type First struct {
+				X int32
+			}
+			type Second struct {
+				Y int64
+			}`,
+			validate: func(t *testing.T, infos []Info) {
+				if len(infos) != 2 {
+					t.Fatalf("expected 2 structs, got %d", len(infos))
+				}
+				names := []string{infos[0].Name, infos[1].Name}
+				sort.Strings(names)
+				if !reflect.DeepEqual(names, []string{"First", "Second"}) {
+					t.Errorf("expected struct names [First Second], got %v", names)
+				}
+			},
+		},
+		{
+			name: "struct with undefined type",
+			input: `type HasUndefined struct {
+				Field types.Struct
+			}`,
+			wantErr:     true,
+			errContains: "type from [types] package is undefined",
+		},
+		{
+			name: "invalid syntax",
+			input: `type Invalid struct {
+				Field: string // using colon instead of space
+			}`,
+			wantErr:     true,
+			errContains: "failed to parse",
+		},
+		{
+			name: "struct with padding",
+			input: `type NeedsPadding struct {
+				A bool    // 1 byte
+				B int64   // 8 bytes, needs 7 bytes padding
+				C int32   // 4 bytes
+			}`,
+			validate: func(t *testing.T, infos []Info) {
+				if len(infos) != 1 {
+					t.Fatalf("expected 1 struct, got %d", len(infos))
+				}
+				info := infos[0]
+
+				// should have 5 fields including padding
+				if len(info.Fields) != 5 {
+					t.Errorf("expected 5 fields (including padding), got %d", len(info.Fields))
+				}
+
+				// check for padding fields
+				var paddingCount int
+				for _, f := range info.Fields {
+					if f.IsPadding {
+						paddingCount++
+					}
+				}
+				if paddingCount != 2 {
+					t.Errorf("expected 2 padding fields, got %d", paddingCount)
+				}
+
+				// original size should be 24 bytes (1 + 7pad + 8 + 4 + 4pad)
+				if info.OriginalSize != 24 {
+					t.Errorf("expected original size of 24 bytes, got %d", info.OriginalSize)
+				}
+			},
+		},
+		{
+			name: "optimized struct layout",
+			input: `type NeedsOptimization struct {
+				A bool    // 1 byte
+				B int64   // 8 bytes
+				C int32   // 4 bytes
+				D bool    // 1 byte
+			}`,
+			validate: func(t *testing.T, infos []Info) {
+				if len(infos) != 1 {
+					t.Fatalf("expected 1 struct, got %d", len(infos))
+				}
+				info := infos[0]
+
+				// Original layout should be larger than optimized
+				if info.OriginalSize <= info.OptimizedSize {
+					t.Errorf("expected original size (%d) to be larger than optimized size (%d)",
+						info.OriginalSize, info.OptimizedSize)
+				}
+
+				// Check field order in optimized layout
+				var lastField string
+				for _, f := range info.OptimizedFields {
+					if !f.IsPadding {
+						lastField = f.Name
+					}
+				}
+				if lastField != "A" && lastField != "D" { // bools should be last in optimized layout
+					t.Errorf("expected bool fields to be last in optimized layout, got %q", lastField)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results, err := AnalyseStructs(tt.input)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				} else if !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("expected error containing %q, got %v", tt.errContains, err)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if tt.validate != nil {
+				tt.validate(t, results)
 			}
 		})
 	}

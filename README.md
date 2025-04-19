@@ -66,5 +66,33 @@ The tool will print the struct layout analysis to stdout. Use the `--svg` flag t
 
 If you want to use from browser just visit the [deployed webapp](https://viztruct.vercel.app). You can paste/type your struct in the text input area and get a full padding analysis.
 
+## Limitations
+
+For now it is not able to handle structs with types not present in the input provided, for instance:
+
+```go
+type Info struct {
+	Name            string        `json:"name"`
+	Type            *types.Struct `json:"type,omitempty,omitzero"`
+	OriginalSize    int64         `json:"original_size"`
+	OptimizedSize   int64         `json:"optimized_size"`
+	WastedBytes     int64         `json:"wasted_bytes"`
+	WastedPercent   float64       `json:"wasted_percent"`
+	Fields          []Field       `json:"fields"`
+	OptimizedFields []Field       `json:"optimized_fields"`
+}
+
+type Field struct {
+	Name      string `json:"name"`
+	TypeName  string `json:"type,omitempty,omitzero"`
+	Offset    int64  `json:"offset"`
+	Size      int64  `json:"size"`
+	Align     int64  `json:"align"`
+	IsPadding bool   `json:"is_padding"`
+}
+```
+
+The type `types.Struct` is just not defined at above input, this kind of input is currently not supported. 
+
 
 
