@@ -5,11 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"go/ast"
-	"go/importer"
-	"go/parser"
-	"go/token"
-	"go/types"
 	"os"
 	"strings"
 
@@ -18,7 +13,7 @@ import (
 )
 
 var (
-	binVersion = "dev" // to be set during build
+	binVersion = ""
 )
 
 type OutputFormat string
@@ -31,29 +26,15 @@ const (
 )
 
 func analyzeStructs(input string, format OutputFormat, generateSVG bool) {
-	src := fmt.Sprintf("package main\n\n%s", input)
-
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "input.go", src, parser.AllErrors)
+	structs, err := structi.AnalyseStructs(input)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error parsing input: %v\n", err)
+		if errI, ok := err.(*structi.Error); ok {
+			fmt.Fprintf(os.Stderr, "%v\n", errI.Error())
+		} else {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+		}
 		os.Exit(1)
 	}
-
-	conf := types.Config{Importer: importer.Default()}
-	info := &types.Info{
-		Types: make(map[ast.Expr]types.TypeAndValue),
-		Defs:  make(map[*ast.Ident]types.Object),
-	}
-
-	_, err = conf.Check("main", fset, []*ast.File{file}, info)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error type checking: %v\n", err)
-		os.Exit(1)
-	}
-
-	sizes := types.StdSizes{WordSize: 8, MaxAlign: 8}
-	structs := structi.AnalyzeNestedStructs(file, &sizes, info, fset)
 
 	if generateSVG {
 		svgOutput, err := svg.BuildVisualization(structs)
@@ -156,7 +137,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Show help if no arguments or help flag
 	if *helpFlag || len(os.Args) == 1 {
 		printUsage()
 	}

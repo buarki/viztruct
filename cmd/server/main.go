@@ -2,9 +2,6 @@ package main
 
 import (
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"go/types"
 	"strings"
 	"syscall/js"
@@ -54,29 +51,10 @@ func generateStructLayoutSVG(this js.Value, args []js.Value) any {
 }
 
 func generateSVGAndCode(structCode string) ([]byte, []byte, error) {
-	// just prepend package declaration if needed
-	if !strings.Contains(structCode, "package") {
-		structCode = "package temp\n\n" + structCode
-	}
-
-	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, "input.go", structCode, parser.AllErrors)
+	structInfos, err := structi.AnalyseStructs(structCode)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse: %v", err)
+		return nil, nil, err
 	}
-
-	conf := types.Config{Importer: nil, Sizes: &customSizes}
-	info := &types.Info{
-		Types: make(map[ast.Expr]types.TypeAndValue),
-		Defs:  make(map[*ast.Ident]types.Object),
-	}
-
-	_, err = conf.Check("temp", fset, []*ast.File{node}, info)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to type-check: %v", err)
-	}
-
-	structInfos := structi.AnalyzeNestedStructs(node, &customSizes, info, fset)
 
 	svgContent, err := svg.BuildVisualization(structInfos)
 	if err != nil {

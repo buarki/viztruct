@@ -18,11 +18,15 @@ WASM_EXEC_PATH=/usr/local/go/lib/wasm/wasm_exec.js
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -X main.binVersion=$(VERSION)
 
+default: build
+
 build-wasm:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -o $(OUTPUT_DIR)/$(WASM_BINARY_NAME) ./$(WASM_DIR)
 
 build-cli:
 	$(GOBUILD) -ldflags "$(LDFLAGS)" -o $(CLI_NAME) ./$(CLI_DIR)
+
+build: build-wasm build-cli
 
 clean:
 	$(GOCLEAN)

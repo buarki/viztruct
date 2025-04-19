@@ -76,26 +76,26 @@ func getTypeColor(typeName string) string {
 }
 
 func BuildVisualization(structs []structi.Info) (string, error) {
-	tmpl, err := template.New("svg_template").
-		Funcs(template.FuncMap{
-			"add": func(a, b float64) float64 { return a + b },
-			"sub": func(a, b float64) float64 { return a - b },
-			"mul": func(a, b float64) float64 { return a * b },
-			"float64": func(i interface{}) float64 {
-				switch v := i.(type) {
-				case int:
-					return float64(v)
-				case int64:
-					return float64(v)
-				case float64:
-					return v
-				default:
-					return 0
-				}
-			},
-			"lt": func(a, b int64) bool { return a < b },
-		}).
-		Parse(svgTemplate.StructLayoutTemplate)
+	tmpl := template.New("svg_template").Funcs(template.FuncMap{
+		"add": func(a, b float64) float64 { return a + b },
+		"sub": func(a, b float64) float64 { return a - b },
+		"mul": func(a, b float64) float64 { return a * b },
+		"float64": func(i interface{}) float64 {
+			switch v := i.(type) {
+			case int:
+				return float64(v)
+			case int64:
+				return float64(v)
+			case float64:
+				return v
+			default:
+				return 0
+			}
+		},
+		"lt": func(a, b int64) bool { return a < b },
+	})
+
+	tmpl, err := tmpl.Parse(svgTemplate.StructLayoutTemplate)
 	if err != nil {
 		return "", fmt.Errorf("error parsing template: %v", err)
 	}

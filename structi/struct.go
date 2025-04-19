@@ -1,10 +1,28 @@
 package structi
 
 import (
+	"fmt"
 	"go/ast"
+	"go/parser"
 	"go/token"
 	"go/types"
 	"sort"
+	"strings"
+)
+
+type Error struct {
+	Message string
+}
+
+func (e *Error) Error() string {
+	return fmt.Sprintf("type from [%s] package is undefined. Check your imports or provide the type definition as well.", e.Message)
+}
+
+var (
+	customSizes = types.StdSizes{
+		WordSize: 8,
+		MaxAlign: 8,
+	}
 )
 
 type Info struct {
@@ -223,7 +241,37 @@ func (i Info) optimizeStructLayout(structType *types.Struct, sizes types.Sizes) 
 	return optimizedFields
 }
 
-func AnalyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, fset *token.FileSet) []Info {
+func AnalyseStructs(structsSource string) ([]Info, error) {
+	// just prepend package declaration if needed
+	if !strings.Contains(structsSource, "package") {
+		structsSource = "package temp\n\n" + structsSource
+	}
+
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, "input.go", structsSource, parser.AllErrors)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse input: %v", err)
+	}
+
+	conf := types.Config{Importer: nil, Sizes: &customSizes}
+	info := &types.Info{
+		Types: make(map[ast.Expr]types.TypeAndValue),
+		Defs:  make(map[*ast.Ident]types.Object),
+	}
+
+	if _, err = conf.Check("temp", fset, []*ast.File{node}, info); err != nil {
+		if strings.Contains(err.Error(), "undefined:") {
+			errParts := strings.Split(err.Error(), "undefined:")
+			unknownPackage := errParts[len(errParts)-1]
+			return nil, &Error{Message: strings.TrimSpace(unknownPackage)}
+		}
+		return nil, &Error{fmt.Sprintf("failed to type-check: %v", err)}
+	}
+
+	return analyzeNestedStructs(node, &customSizes, info, fset)
+}
+
+func analyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, fset *token.FileSet) ([]Info, error) {
 	var structInfos []Info
 
 	// find all struct declarations including nested ones
@@ -284,5 +332,5 @@ func AnalyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, f
 		return true
 	})
 
-	return structInfos
+	return structInfos, nil
 }
