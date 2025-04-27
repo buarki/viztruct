@@ -11,6 +11,12 @@ SVG visualization:
 
 ## CLI installation
 
+### Go install
+
+```sh
+go install github.com/buarki/viztruct/cmd/viztruct@latest
+```
+
 ### Download binaries
 
 ```sh
