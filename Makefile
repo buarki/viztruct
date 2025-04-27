@@ -12,7 +12,7 @@ CLI_NAME=viztruct
 WASM_BINARY_NAME=main.wasm
 OUTPUT_DIR=static
 WASM_DIR=cmd/server
-CLI_DIR=cmd/cli
+CLI_DIR=cmd/viztruct
 WASM_EXEC_PATH=/usr/local/go/lib/wasm/wasm_exec.js
 
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -31,7 +31,6 @@ build: build-wasm build-cli
 clean:
 	$(GOCLEAN)
 	rm -f $(OUTPUT_DIR)/$(WASM_BINARY_NAME)
-	rm -rf bin/
 
 wasm-exec:
 	cp $(WASM_EXEC_PATH) ./static
