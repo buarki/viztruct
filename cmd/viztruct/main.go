@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	binVersion = ""
+	binVersion = Version
 )
 
 type OutputFormat string
