@@ -14,19 +14,17 @@ import (
 )
 
 var (
-	binVersion = "devel" // default version
+	binVersion = "devel"
 )
 
 func init() {
 	if info, ok := debug.ReadBuildInfo(); ok {
-		// Try to get version from module path
 		if info.Main.Version != "" && info.Main.Version != "(devel)" {
 			binVersion = info.Main.Version
 		} else {
-			// For development builds, try to get git info
 			for _, setting := range info.Settings {
 				if setting.Key == "vcs.revision" {
-					binVersion = "devel-" + setting.Value[:7] // Use first 7 chars of commit hash
+					binVersion = "devel-" + setting.Value[:7]
 					break
 				}
 			}
