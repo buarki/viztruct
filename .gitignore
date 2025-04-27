@@ -1,4 +1,4 @@
 *.svg
 ./*.png
-viztruct
 *.cast
+/viztruct
