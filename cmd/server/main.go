@@ -51,7 +51,7 @@ func generateStructLayoutSVG(this js.Value, args []js.Value) any {
 }
 
 func generateSVGAndCode(structCode string) ([]byte, []byte, error) {
-	structInfos, err := structi.AnalyseStructs(structCode)
+	structInfos, err := structi.AnalyseStructsWithStrategies(structCode, nil)
 	if err != nil {
 		return nil, nil, err
 	}

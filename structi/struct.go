@@ -1,12 +1,14 @@
 package structi
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
-	"sort"
+	"os"
 	"strings"
 )
 
@@ -23,6 +25,8 @@ var (
 		WordSize: 8,
 		MaxAlign: 8,
 	}
+
+	ErrNoOptimizers = errors.New("at least one optimizer is required")
 )
 
 type Info struct {
@@ -45,6 +49,13 @@ type Field struct {
 	IsPadding bool   `json:"is_padding"`
 }
 
+type fieldWithMeta struct {
+	name  string
+	typ   types.Type
+	size  int64
+	align int64
+}
+
 func typeName(t types.Type) string {
 	return t.String()
 }
@@ -57,7 +68,7 @@ func (i Info) TotalSize() int64 {
 	return last.Offset + last.Size
 }
 
-func (i Info) OptimazedTotalSize() int64 {
+func (i Info) OptimizedTotalSize() int64 {
 	if len(i.OptimizedFields) == 0 {
 		return 0
 	}
@@ -82,7 +93,7 @@ func (i Info) WastedSpace() (int64, float64) {
 	return wastedBytes, wastedPercent
 }
 
-func (i Info) OptimazedWastedSpace() (int64, float64) {
+func (i Info) OptimizedWastedSpace() (int64, float64) {
 	var wastedBytes int64
 	for _, f := range i.OptimizedFields {
 		if f.IsPadding {
@@ -90,7 +101,7 @@ func (i Info) OptimazedWastedSpace() (int64, float64) {
 		}
 	}
 
-	totalSize := i.TotalSize()
+	totalSize := i.OptimizedTotalSize()
 	if totalSize == 0 {
 		return 0, 0
 	}
@@ -158,12 +169,9 @@ func (i Info) calculateLayout(structType *types.Struct, sizes types.Sizes) []Fie
 	return fields
 }
 
-func (i Info) optimizeStructLayout(structType *types.Struct, sizes types.Sizes) []Field {
-	type fieldWithMeta struct {
-		name  string
-		typ   types.Type
-		size  int64
-		align int64
+func (i Info) optimizeStructLayoutWithStrategies(structType *types.Struct, sizes types.Sizes, optimizers []FieldOptimizer) ([]Field, error) {
+	if len(optimizers) == 0 {
+		return nil, ErrNoOptimizers
 	}
 
 	var fields []fieldWithMeta
@@ -179,100 +187,37 @@ func (i Info) optimizeStructLayout(structType *types.Struct, sizes types.Sizes) 
 		})
 	}
 
-	// sort fields by alignment (descending) and then by size (descending)
-	sort.Slice(fields, func(i, j int) bool {
-		if fields[i].align != fields[j].align {
-			return fields[i].align > fields[j].align
-		}
-		return fields[i].size > fields[j].size
-	})
+	// Try optimizing with the first optimizer
+	bestLayout := optimizers[0].Optimize(fields)
+	bestTotalSize := calculateTotalSize(bestLayout)
 
-	// calculate offsets for optimized layout
-	var optimizedFields []Field
-	var offset int64 = 0
+	// Try other optimizers and keep the best result
+	for i := 1; i < len(optimizers); i++ {
+		layout := optimizers[i].Optimize(fields)
+		totalSize := calculateTotalSize(layout)
 
-	for _, f := range fields {
-		// align field
-		if rem := offset % f.align; rem != 0 {
-			paddingSize := f.align - rem
-			optimizedFields = append(optimizedFields, Field{
-				Name:      "padding",
-				TypeName:  "",
-				Offset:    offset,
-				Size:      paddingSize,
-				Align:     1,
-				IsPadding: true,
-			})
-			offset += paddingSize
-		}
-
-		optimizedFields = append(optimizedFields, Field{
-			Name:      f.name,
-			TypeName:  typeName(f.typ),
-			Offset:    offset,
-			Size:      f.size,
-			Align:     f.align,
-			IsPadding: false,
-		})
-
-		offset += f.size
-	}
-
-	// add final padding for struct alignment
-	var structAlign int64 = 1
-	for _, f := range fields {
-		if f.align > structAlign {
-			structAlign = f.align
+		if totalSize < bestTotalSize {
+			bestLayout = layout
+			bestTotalSize = totalSize
 		}
 	}
 
-	if rem := offset % structAlign; rem != 0 {
-		paddingSize := structAlign - rem
-		optimizedFields = append(optimizedFields, Field{
-			Name:      "tail padding",
-			TypeName:  "",
-			Offset:    offset,
-			Size:      paddingSize,
-			Align:     1,
-			IsPadding: true,
-		})
-	}
-
-	return optimizedFields
+	return bestLayout, nil
 }
 
-func AnalyseStructs(structsSource string) ([]Info, error) {
-	// just prepend package declaration if needed
-	if !strings.Contains(structsSource, "package") {
-		structsSource = "package temp\n\n" + structsSource
+// calculate total size of a layout including padding
+func calculateTotalSize(layout []Field) int64 {
+	if len(layout) == 0 {
+		return 0
 	}
-
-	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, "input.go", structsSource, parser.AllErrors)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse input: %v", err)
-	}
-
-	conf := types.Config{Importer: nil, Sizes: &customSizes}
-	info := &types.Info{
-		Types: make(map[ast.Expr]types.TypeAndValue),
-		Defs:  make(map[*ast.Ident]types.Object),
-	}
-
-	if _, err = conf.Check("temp", fset, []*ast.File{node}, info); err != nil {
-		if strings.Contains(err.Error(), "undefined:") {
-			errParts := strings.Split(err.Error(), "undefined:")
-			unknownPackage := errParts[len(errParts)-1]
-			return nil, &Error{Message: strings.TrimSpace(unknownPackage)}
-		}
-		return nil, &Error{fmt.Sprintf("failed to type-check: %v", err)}
-	}
-
-	return analyzeNestedStructs(node, &customSizes, info, fset)
+	last := layout[len(layout)-1]
+	return last.Offset + last.Size
 }
 
-func analyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, fset *token.FileSet) ([]Info, error) {
+func analyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, strategyNames []string) ([]Info, error) {
 	var structInfos []Info
+
+	var processingError error
 
 	// find all struct declarations including nested ones
 	ast.Inspect(node, func(n ast.Node) bool {
@@ -281,8 +226,7 @@ func analyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, f
 			return true // continue traversing
 		}
 
-		_, ok = typeSpec.Type.(*ast.StructType)
-		if !ok {
+		if _, ok = typeSpec.Type.(*ast.StructType); !ok {
 			return true // not a struct, continue
 		}
 
@@ -300,9 +244,18 @@ func analyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, f
 
 		tempInfo := Info{}
 		fields := tempInfo.calculateLayout(underlyingType, sizes)
-		optimizedFields := tempInfo.optimizeStructLayout(underlyingType, sizes)
+		optimazers, err := collectFieldOptmizers(strategyNames)
+		if err != nil {
+			processingError = err
+			return false
+		}
+		optimizedFields, err := tempInfo.optimizeStructLayoutWithStrategies(underlyingType, sizes, optimazers)
+		if err != nil {
+			processingError = err
+			return false
+		}
 
-		// calculate sizes using the fields directly
+		// FIXME: repeated code here!
 		originalSize := int64(0)
 		if len(fields) > 0 {
 			last := fields[len(fields)-1]
@@ -332,5 +285,182 @@ func analyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, f
 		return true
 	})
 
+	if processingError != nil {
+		return nil, processingError
+	}
+
 	return structInfos, nil
+}
+
+func collectStructs(node *ast.File, info *types.Info, strategyNames []string) ([]Info, error) {
+	var result []Info
+
+	var processingErrors error
+
+	ast.Inspect(node, func(n ast.Node) bool {
+		typeSpec, ok := n.(*ast.TypeSpec)
+		if !ok {
+			return true // continue traversing
+		}
+
+		_, isStruct := typeSpec.Type.(*ast.StructType)
+		if !isStruct {
+			return true
+		}
+
+		// get the type info
+		typeObj := info.Defs[typeSpec.Name]
+		if typeObj == nil {
+			return true // no type info available
+		}
+
+		// get the underlying struct type
+		underlyingType, ok := typeObj.Type().Underlying().(*types.Struct)
+		if !ok {
+			return true // not a struct type
+		}
+
+		structInfo, err := processStructWithStrategies(typeSpec.Name.Name, underlyingType, strategyNames)
+		if err != nil {
+			processingErrors = err
+			return false
+		}
+		result = append(result, structInfo)
+
+		return true
+	})
+
+	if processingErrors != nil {
+		return nil, processingErrors
+	}
+
+	return result, nil
+}
+
+func collectFieldOptmizers(strategyNames []string) ([]FieldOptimizer, error) {
+	var optimizers []FieldOptimizer
+	if len(strategyNames) == 0 {
+		return GetAllOptimizers(), nil
+	}
+	optimizers, err := GetOptimizersByNames(strategyNames)
+	if err != nil {
+		return nil, err
+	}
+	return optimizers, nil
+}
+
+// process a struct and calculate its layout with specified optimizers
+func processStructWithStrategies(name string, structType *types.Struct, strategyNames []string) (Info, error) {
+	tempInfo := Info{
+		Name: name,
+	}
+
+	// calculate layout
+	fields := tempInfo.calculateLayout(structType, &customSizes)
+	optimizers, err := collectFieldOptmizers(strategyNames)
+	if err != nil {
+		return Info{}, err
+	}
+	optimizedFields, err := tempInfo.optimizeStructLayoutWithStrategies(structType, &customSizes, optimizers)
+	if err != nil {
+		return Info{}, err
+	}
+
+	// calculate sizes using the fields directly
+	originalSize := int64(0)
+	if len(fields) > 0 {
+		last := fields[len(fields)-1]
+		originalSize = last.Offset + last.Size
+	}
+
+	optimizedSize := int64(0)
+	if len(optimizedFields) > 0 {
+		last := optimizedFields[len(optimizedFields)-1]
+		optimizedSize = last.Offset + last.Size
+	}
+
+	wastedBytes, wastedPercent := tempInfo.WastedSpace()
+
+	return Info{
+		Name:            name,
+		Type:            structType,
+		OriginalSize:    originalSize,
+		OptimizedSize:   optimizedSize,
+		WastedBytes:     wastedBytes,
+		WastedPercent:   wastedPercent,
+		Fields:          fields,
+		OptimizedFields: optimizedFields,
+	}, nil
+}
+
+// AnalyseStructsWithStrategies analyzes structs from a string with specified optimizers
+func AnalyseStructsWithStrategies(structsSource string, strategyNames []string) ([]Info, error) {
+	if !strings.Contains(structsSource, "package") {
+		structsSource = "package temp\n\n" + structsSource
+	}
+
+	fset := token.NewFileSet()
+	node, err := parser.ParseFile(fset, "input.go", structsSource, parser.AllErrors)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse input: %v", err)
+	}
+
+	conf := types.Config{Importer: nil, Sizes: &customSizes}
+	info := &types.Info{
+		Types: make(map[ast.Expr]types.TypeAndValue),
+		Defs:  make(map[*ast.Ident]types.Object),
+	}
+
+	if _, err = conf.Check("temp", fset, []*ast.File{node}, info); err != nil {
+		if strings.Contains(err.Error(), "undefined:") {
+			errParts := strings.Split(err.Error(), "undefined:")
+			unknownPackage := errParts[len(errParts)-1]
+			return nil, &Error{Message: strings.TrimSpace(unknownPackage)}
+		}
+		return nil, &Error{fmt.Sprintf("failed to type-check: %v", err)}
+	}
+
+	return analyzeNestedStructs(node, &customSizes, info, strategyNames)
+}
+
+// AnalyseFromFileWithStrategies analyzes structs from a file path with specified optimizers
+func AnalyseFromFileWithStrategies(filePath string, strategyNames []string) ([]Info, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to analyse structs from file: %v", err)
+	}
+
+	fset := token.NewFileSet()
+
+	node, err := parser.ParseFile(fset, filePath, content, parser.ParseComments)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse file %s: %v", filePath, err)
+	}
+
+	// importer that will also import external types
+	sourceImporter := importer.ForCompiler(fset, "source", nil)
+
+	// first pass: type check the file to get all types
+	conf := types.Config{
+		Importer: sourceImporter,
+		Sizes:    &customSizes,
+		Error: func(err error) {
+			fmt.Printf("type checking warning: %v\n", err)
+		},
+	}
+
+	info := &types.Info{
+		Types: make(map[ast.Expr]types.TypeAndValue),
+		Defs:  make(map[*ast.Ident]types.Object),
+		Uses:  make(map[*ast.Ident]types.Object),
+	}
+
+	// type check the file
+	_, err = conf.Check("", fset, []*ast.File{node}, info)
+	if err != nil {
+		// type checking might fail due to external types, but we can still proceed
+		fmt.Printf("warning: type checking failed: %v\n", err)
+	}
+
+	return collectStructs(node, info, strategyNames)
 }

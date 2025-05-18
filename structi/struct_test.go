@@ -7,6 +7,8 @@ import (
 	"go/token"
 	"go/types"
 	"math"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -178,91 +180,6 @@ type MyStruct struct {
 	}
 }
 
-func TestOptimizeStructLayout(t *testing.T) {
-	tests := []struct {
-		name     string
-		src      string
-		typeName string
-		expected []Field
-	}{
-		{
-			name: "int8 then int32",
-			src: `
-				package test
-				type MyStruct struct {
-					A int8
-					B int32
-				}
-			`,
-			typeName: "MyStruct",
-			expected: []Field{
-				{Name: "B", Offset: 0, Size: 4, Align: 4, IsPadding: false},
-				{Name: "A", Offset: 4, Size: 1, Align: 1, IsPadding: false},
-				{Name: "tail padding", Offset: 5, Size: 3, Align: 1, IsPadding: true},
-			},
-		},
-		{
-			name: "three mixed types",
-			src: `
-				package test
-				type MyStruct struct {
-					A int8
-					B int64
-					C int32
-				}
-			`,
-			typeName: "MyStruct",
-			expected: []Field{
-				{Name: "B", Offset: 0, Size: 8, Align: 8, IsPadding: false},
-				{Name: "C", Offset: 8, Size: 4, Align: 4, IsPadding: false},
-				{Name: "A", Offset: 12, Size: 1, Align: 1, IsPadding: false},
-				{Name: "tail padding", Offset: 13, Size: 3, Align: 1, IsPadding: true},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fset := token.NewFileSet()
-			node, err := parser.ParseFile(fset, "src.go", tt.src, 0)
-			if err != nil {
-				t.Fatalf("parse error: %v", err)
-			}
-
-			conf := types.Config{Importer: importer.Default()}
-			pkg, err := conf.Check("test", fset, []*ast.File{node}, nil)
-			if err != nil {
-				t.Fatalf("type check error: %v", err)
-			}
-
-			obj := pkg.Scope().Lookup(tt.typeName)
-			if obj == nil {
-				t.Fatalf("type %s not found", tt.typeName)
-			}
-
-			structType, ok := obj.Type().Underlying().(*types.Struct)
-			if !ok {
-				t.Fatalf("%s is not a struct", tt.typeName)
-			}
-
-			sizes := types.StdSizes{WordSize: 8, MaxAlign: 8}
-			info := Info{}
-			fields := info.optimizeStructLayout(structType, &sizes)
-
-			if len(fields) != len(tt.expected) {
-				t.Fatalf("unexpected field count: got %d, want %d", len(fields), len(tt.expected))
-			}
-
-			for i, f := range fields {
-				exp := tt.expected[i]
-				if f.Name != exp.Name || f.Offset != exp.Offset || f.Size != exp.Size || f.IsPadding != exp.IsPadding {
-					t.Errorf("field[%d] = %+v, want %+v", i, f, exp)
-				}
-			}
-		})
-	}
-}
-
 func TestAnalyzeNestedStructs(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -325,8 +242,7 @@ func TestAnalyzeNestedStructs(t *testing.T) {
 				t.Fatalf("type check error: %v", err)
 			}
 
-			sizes := types.StdSizes{WordSize: 8, MaxAlign: 8}
-			results, err := analyzeNestedStructs(node, &sizes, info, fset)
+			results, err := AnalyseStructsWithStrategies(tt.src, nil)
 			if err != nil {
 				t.Fatalf("error analyzing nested structs: %v", err)
 			}
@@ -491,7 +407,7 @@ func TestAnalyseStructs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			results, err := AnalyseStructs(tt.input)
+			results, err := AnalyseStructsWithStrategies(tt.input, nil)
 
 			if tt.wantErr {
 				if err == nil {
@@ -512,3 +428,230 @@ func TestAnalyseStructs(t *testing.T) {
 		})
 	}
 }
+
+func TestAnalyseFromFile(t *testing.T) {
+	tempDir := t.TempDir()
+	testFilePath := filepath.Join(tempDir, "test_struct.go")
+
+	testFileContent := `package test
+
+import (
+	"time"
+)
+
+type SimpleStruct struct {
+	A int64
+	B int32
+	C bool
+}
+
+type ComplexStruct struct {
+	ID        string
+	Data      SimpleStruct
+	Values    []int
+	Mapping   map[string]int
+	Timestamp time.Time
+}
+`
+
+	err := os.WriteFile(testFilePath, []byte(testFileContent), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	structs, err := AnalyseFromFileWithStrategies(testFilePath, nil)
+	if err != nil {
+		t.Fatalf("AnalyseFromFile failed: %v", err)
+	}
+
+	if len(structs) != 2 {
+		t.Errorf("Expected 2 structs, got %d", len(structs))
+	}
+
+	var simpleStruct *Info
+	var complexStruct *Info
+
+	for i := range structs {
+		if structs[i].Name == "SimpleStruct" {
+			simpleStruct = &structs[i]
+		} else if structs[i].Name == "ComplexStruct" {
+			complexStruct = &structs[i]
+		}
+	}
+
+	if simpleStruct == nil {
+		t.Fatalf("SimpleStruct not found in results")
+	}
+
+	nonPaddingFields := 0
+	for _, field := range simpleStruct.Fields {
+		if !field.IsPadding {
+			nonPaddingFields++
+		}
+	}
+
+	if nonPaddingFields != 3 {
+		t.Errorf("Expected 3 non-padding fields in SimpleStruct, got %d", nonPaddingFields)
+	}
+
+	if complexStruct == nil {
+		t.Fatalf("ComplexStruct not found in results")
+	}
+
+	nonPaddingFields = 0
+	for _, field := range complexStruct.Fields {
+		if !field.IsPadding {
+			nonPaddingFields++
+		}
+	}
+
+	if nonPaddingFields != 5 {
+		t.Errorf("Expected 5 non-padding fields in ComplexStruct, got %d", nonPaddingFields)
+	}
+
+	timeFieldFound := false
+	for _, field := range complexStruct.Fields {
+		if !field.IsPadding && field.Name == "Timestamp" && field.TypeName == "time.Time" {
+			timeFieldFound = true
+			break
+		}
+	}
+
+	if !timeFieldFound {
+		t.Errorf("time.Time field not properly resolved in ComplexStruct")
+	}
+}
+
+func TestCollectFieldOptmizers(t *testing.T) {
+	// Create a mock type for testing
+	mockType := &MockType{}
+
+	tests := []struct {
+		name           string
+		strategyNames  []string
+		expectedCount  int
+		expectedNames  []string
+		expectError    bool
+		errorSubstring string
+	}{
+		{
+			name:          "empty strategy names returns all optimizers",
+			strategyNames: []string{},
+			expectedCount: 4,
+			expectedNames: []string{"alignment-then-size", "size-then-alignment", "group-by-alignment", "greedy-packing"},
+		},
+		{
+			name:          "single strategy by CLI name",
+			strategyNames: []string{"alignment"},
+			expectedCount: 1,
+			expectedNames: []string{"alignment-then-size"},
+		},
+		{
+			name:          "multiple strategies by CLI names",
+			strategyNames: []string{"alignment", "size", "group"},
+			expectedCount: 3,
+			expectedNames: []string{"alignment-then-size", "size-then-alignment", "group-by-alignment"},
+		},
+		{
+			name:          "multiple strategies by full names",
+			strategyNames: []string{"alignment-then-size", "size-then-alignment"},
+			expectedCount: 2,
+			expectedNames: []string{"alignment-then-size", "size-then-alignment"},
+		},
+		{
+			name:          "mixed CLI and full names",
+			strategyNames: []string{"alignment", "size-then-alignment", "greedy"},
+			expectedCount: 3,
+			expectedNames: []string{"alignment-then-size", "size-then-alignment", "greedy-packing"},
+		},
+		{
+			name:           "invalid strategy name",
+			strategyNames:  []string{"invalid"},
+			expectError:    true,
+			errorSubstring: "unknown optimizer: invalid",
+		},
+		{
+			name:           "mix of valid and invalid",
+			strategyNames:  []string{"alignment", "invalid", "size"},
+			expectError:    true,
+			errorSubstring: "invalid optimizers",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			optimizers, err := collectFieldOptmizers(tt.strategyNames)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got nil")
+				} else if tt.errorSubstring != "" && !strings.Contains(err.Error(), tt.errorSubstring) {
+					t.Errorf("error %q does not contain expected substring %q", err.Error(), tt.errorSubstring)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if len(optimizers) != tt.expectedCount {
+				t.Errorf("expected %d optimizers, got %d", tt.expectedCount, len(optimizers))
+			}
+
+			if tt.expectedNames != nil {
+				var names []string
+				for _, opt := range optimizers {
+					names = append(names, opt.Name())
+				}
+
+				sort.Strings(names)
+				expectedSorted := make([]string, len(tt.expectedNames))
+				copy(expectedSorted, tt.expectedNames)
+				sort.Strings(expectedSorted)
+
+				if !reflect.DeepEqual(names, expectedSorted) {
+					t.Errorf("expected optimizer names %v, got %v", expectedSorted, names)
+				}
+			}
+
+			if len(optimizers) > 0 {
+				testFields := []fieldWithMeta{
+					{name: "test1", typ: mockType, size: 4, align: 4},
+					{name: "test2", typ: mockType, size: 8, align: 8},
+				}
+
+				originalFields := make([]fieldWithMeta, len(testFields))
+				copy(originalFields, testFields)
+
+				for _, opt := range optimizers {
+					// Call Optimize instead of ArrangeFields
+					result := opt.Optimize(testFields)
+
+					if !reflect.DeepEqual(testFields, originalFields) {
+						t.Errorf("optimizer %s modified the input slice", opt.Name())
+					}
+
+					// Count non-padding fields in the result
+					nonPaddingCount := 0
+					for _, f := range result {
+						if !f.IsPadding {
+							nonPaddingCount++
+						}
+					}
+
+					if nonPaddingCount != len(testFields) {
+						t.Errorf("optimizer %s returned incorrect number of non-padding fields: got %d, expected %d",
+							opt.Name(), nonPaddingCount, len(testFields))
+					}
+				}
+			}
+		})
+	}
+}
+
+// MockType implements types.Type for testing
+type MockType struct{}
+
+func (m *MockType) Underlying() types.Type { return m }
+func (m *MockType) String() string         { return "MockType" }
