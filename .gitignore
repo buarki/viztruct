@@ -2,3 +2,5 @@
 ./*.png
 *.cast
 /viztruct
+.vscode
+.stopped

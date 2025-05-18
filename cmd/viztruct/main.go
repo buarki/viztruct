@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"sort"
 	"strings"
 
 	"github.com/buarki/viztruct/structi"
@@ -41,8 +42,16 @@ const (
 	svgFile = "struct-layout.svg"
 )
 
-func analyzeStructs(input string, format OutputFormat, generateSVG bool) {
-	structs, err := structi.AnalyseStructs(input)
+func analyzeStructs(input string, format OutputFormat, generateSVG bool, filePath string, strategyNames []string) {
+	var structs []structi.Info
+	var err error
+
+	if filePath != "" {
+		structs, err = structi.AnalyseFromFileWithStrategies(filePath, strategyNames)
+	} else {
+		structs, err = structi.AnalyseStructsWithStrategies(input, strategyNames)
+	}
+
 	if err != nil {
 		if errI, ok := err.(*structi.Error); ok {
 			fmt.Fprintf(os.Stderr, "%v\n", errI.Error())
@@ -73,30 +82,119 @@ func analyzeStructs(input string, format OutputFormat, generateSVG bool) {
 		}
 		fmt.Println(string(jsonOutput))
 	} else {
-		for _, s := range structs {
-			fmt.Printf("\nStruct: %s\n", s.Name)
-			fmt.Printf("Original Size: %d bytes\n", s.OriginalSize)
-			fmt.Printf("Optimized Size: %d bytes\n", s.OptimizedSize)
-			fmt.Printf("Wasted Space: %d bytes (%.2f%%)\n", s.WastedBytes, s.WastedPercent)
+		fmt.Printf("Found %d struct(s)\n\n", len(structs))
 
-			fmt.Println("\nOriginal Layout:")
+		for _, s := range structs {
+			fmt.Printf("Struct: %s\n", s.Name)
+			fmt.Printf("  Original size: %d bytes\n", s.OriginalSize)
+			fmt.Printf("  Optimized size: %d bytes\n", s.OptimizedSize)
+
+			savings := s.OriginalSize - s.OptimizedSize
+			if savings > 0 {
+				fmt.Printf("  Potential savings: %d bytes (%.2f%%)\n",
+					savings, float64(savings)/float64(s.OriginalSize)*100)
+			}
+
+			fmt.Printf("  Wasted bytes: %d (%.2f%%)\n", s.WastedBytes, s.WastedPercent)
+
+			paddingCount := 0
+			totalPaddingBytes := int64(0)
 			for _, f := range s.Fields {
 				if f.IsPadding {
-					fmt.Printf("  [padding] %d bytes at offset %d\n", f.Size, f.Offset)
+					paddingCount++
+					totalPaddingBytes += f.Size
+				}
+			}
+			fmt.Printf("  Padding: %d bytes in %d locations\n", totalPaddingBytes, paddingCount)
+
+			fmt.Println("\n  Original memory layout:")
+			fmt.Println("  ┌" + strings.Repeat("─", 70) + "┐")
+
+			for _, f := range s.Fields {
+				prefix := "  │ "
+				if f.IsPadding {
+					fmt.Printf("%s%-12s offset: %3d  size: %3d bytes %s\n",
+						prefix, "Padding", f.Offset, f.Size, strings.Repeat("▒", int(f.Size)))
 				} else {
-					fmt.Printf("  %s (%s) %d bytes at offset %d\n", f.Name, f.TypeName, f.Size, f.Offset)
+					fmt.Printf("%s%-12s offset: %3d  size: %3d bytes  align: %d\n",
+						prefix, f.Name+":", f.Offset, f.Size, f.Align)
+				}
+			}
+			fmt.Println("  └" + strings.Repeat("─", 70) + "┘")
+
+			fmt.Println("\n  Optimized layout:")
+			fmt.Println("  ┌" + strings.Repeat("─", 70) + "┐")
+
+			for _, f := range s.OptimizedFields {
+				prefix := "  │ "
+				if f.IsPadding {
+					fmt.Printf("%s%-12s offset: %3d  size: %3d bytes %s\n",
+						prefix, "Padding", f.Offset, f.Size, strings.Repeat("▒", int(f.Size)))
+				} else {
+					fmt.Printf("%s%-12s offset: %3d  size: %3d bytes  align: %d\n",
+						prefix, f.Name+":", f.Offset, f.Size, f.Align)
+				}
+			}
+			fmt.Println("  └" + strings.Repeat("─", 70) + "┘")
+
+			fmt.Println("\n  Field details:")
+			fmt.Printf("  %-20s %-20s %-10s %-10s %-10s\n", "Name", "Type", "Size", "Align", "Offset")
+			fmt.Println("  " + strings.Repeat("─", 70))
+			for _, f := range s.Fields {
+				if !f.IsPadding {
+					fmt.Printf("  %-20s %-20s %-10d %-10d %-10d\n",
+						f.Name, f.TypeName, f.Size, f.Align, f.Offset)
 				}
 			}
 
-			fmt.Println("\nOptimized Layout:")
-			for _, f := range s.OptimizedFields {
-				if f.IsPadding {
-					fmt.Printf("  [padding] %d bytes at offset %d\n", f.Size, f.Offset)
-				} else {
-					fmt.Printf("  %s (%s) %d bytes at offset %d\n", f.Name, f.TypeName, f.Size, f.Offset)
-				}
-			}
+			fmt.Println()
 		}
+
+		if len(structs) > 1 {
+			outputSummary(structs)
+		}
+	}
+}
+
+func outputSummary(structs []structi.Info) {
+	fmt.Println("\n=== SUMMARY ===")
+	fmt.Printf("Total structs analyzed: %d\n\n", len(structs))
+
+	sort.Slice(structs, func(i, j int) bool {
+		return structs[i].WastedPercent > structs[j].WastedPercent
+	})
+
+	fmt.Println("Structs ranked by wasted space:")
+	fmt.Printf("%-20s %-15s %-15s %-15s %-15s\n",
+		"Struct Name", "Original Size", "Wasted Bytes", "Wasted %", "Potential Savings")
+	fmt.Println(strings.Repeat("─", 80))
+
+	var totalOriginalSize, totalWastedBytes, totalPotentialSavings int64
+
+	for _, s := range structs {
+		potentialSavings := s.OriginalSize - s.OptimizedSize
+		fmt.Printf("%-20s %-15d %-15d %-15.2f %-15d\n",
+			s.Name, s.OriginalSize, s.WastedBytes, s.WastedPercent, potentialSavings)
+
+		totalOriginalSize += s.OriginalSize
+		totalWastedBytes += s.WastedBytes
+		totalPotentialSavings += potentialSavings
+	}
+
+	fmt.Println(strings.Repeat("─", 80))
+
+	var totalWastedPercent float64
+	if totalOriginalSize > 0 {
+		totalWastedPercent = float64(totalWastedBytes) / float64(totalOriginalSize) * 100
+	}
+
+	fmt.Printf("%-20s %-15d %-15d %-15.2f %-15d\n",
+		"TOTAL", totalOriginalSize, totalWastedBytes, totalWastedPercent, totalPotentialSavings)
+
+	if totalPotentialSavings > 0 {
+		savingsPercent := float64(totalPotentialSavings) / float64(totalOriginalSize) * 100
+		fmt.Printf("\nOptimizing all structs could save %d bytes (%.2f%% of total size)\n",
+			totalPotentialSavings, savingsPercent)
 	}
 }
 
@@ -124,18 +222,21 @@ func readStructFromFile(filePath string) (string, error) {
 func printUsage() {
 	fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "Options:\n")
-	fmt.Fprintf(os.Stderr, "  --format string    Output format (json or txt) (default \"txt\")\n")
-	fmt.Fprintf(os.Stderr, "  --struct string    Inline struct definition\n")
-	fmt.Fprintf(os.Stderr, "  --file string      Path to file containing struct definitions\n")
-	fmt.Fprintf(os.Stderr, "  --svg              Generate SVG visualization (default false)\n")
-	fmt.Fprintf(os.Stderr, "  --version          Show version information\n")
-	fmt.Fprintf(os.Stderr, "  --help             Show help message\n")
+	fmt.Fprintf(os.Stderr, "  --format string      Output format (json or txt) (default \"txt\")\n")
+	fmt.Fprintf(os.Stderr, "  --struct string      Inline struct definition\n")
+	fmt.Fprintf(os.Stderr, "  --file string        Path to file containing struct definitions\n")
+	fmt.Fprintf(os.Stderr, "  --svg                Generate SVG visualization (default false)\n")
+	fmt.Fprintf(os.Stderr, "  --strategies string  Comma-separated list of optimization strategies to use\n")
+	fmt.Fprintf(os.Stderr, "                       Available strategies: %s (default: all)\n",
+		strings.Join(structi.GetAllOptimizerNames(), ", "))
+	fmt.Fprintf(os.Stderr, "  --version            Show version information\n")
+	fmt.Fprintf(os.Stderr, "  --help               Show help message\n")
 	fmt.Fprintf(os.Stderr, "\nExamples:\n")
 	fmt.Fprintf(os.Stderr, "  %s --struct 'type MyStruct struct { a int; b string }'\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "  %s --file structs.go\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "  %s --strategies=\"greedy,group\" --file structs.go\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "  %s --format json --struct 'type MyStruct struct { a int; b string }'\n", os.Args[0])
 	fmt.Fprintf(os.Stderr, "  %s --svg --struct 'type MyStruct struct { a int; b string }'\n", os.Args[0])
-	os.Exit(1)
 }
 
 func main() {
@@ -145,6 +246,7 @@ func main() {
 	helpFlag := flag.Bool("help", false, "Show help message")
 	svgFlag := flag.Bool("svg", false, "Generate SVG visualization")
 	version := flag.Bool("version", false, "Show version information")
+	strategiesFlag := flag.String("strategies", "", "Comma-separated list of optimization strategies to use")
 
 	flag.Parse()
 
@@ -155,6 +257,7 @@ func main() {
 
 	if *helpFlag || len(os.Args) == 1 {
 		printUsage()
+		os.Exit(1)
 	}
 
 	format := OutputFormat(*formatFlag)
@@ -177,12 +280,36 @@ func main() {
 	} else {
 		fmt.Fprintf(os.Stderr, "error: no struct definition provided\n")
 		printUsage()
+		os.Exit(1)
 	}
 
 	if input == "" {
 		fmt.Fprintf(os.Stderr, "error: empty struct definition\n")
 		printUsage()
+		os.Exit(1)
 	}
 
-	analyzeStructs(input, format, *svgFlag)
+	var strategyNames []string
+	if *strategiesFlag != "" {
+		strategyNames = strings.Split(*strategiesFlag, ",")
+		for i := range strategyNames {
+			strategyNames[i] = strings.TrimSpace(strategyNames[i])
+		}
+
+		allNames := structi.GetAllOptimizerNames()
+		allNamesMap := make(map[string]bool)
+		for _, name := range allNames {
+			allNamesMap[name] = true
+		}
+
+		for _, name := range strategyNames {
+			if !allNamesMap[name] {
+				fmt.Fprintf(os.Stderr, "error: unknown strategy '%s'\nAvailable strategies: %s\n",
+					name, strings.Join(allNames, ", "))
+				os.Exit(1)
+			}
+		}
+	}
+
+	analyzeStructs(input, format, *svgFlag, *fileFlag, strategyNames)
 }

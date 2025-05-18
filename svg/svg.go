@@ -117,9 +117,9 @@ func BuildVisualization(structs []structi.Info) (string, error) {
 
 func prepareTemplateData(info structi.Info, width float64) TemplateData {
 	wastedBytes, wastedPercent := info.WastedSpace()
-	_, optimizedWastedPercent := info.OptimazedWastedSpace()
+	_, optimizedWastedPercent := info.OptimizedWastedSpace()
 	structTotalSize := info.TotalSize()
-	optimizedSize := info.OptimazedTotalSize()
+	optimizedSize := info.OptimizedTotalSize()
 
 	scale := width / float64(structTotalSize)
 	if structTotalSize == 0 {
