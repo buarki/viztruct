@@ -5,6 +5,7 @@ GOBUILD=$(GOCMD) build
 GOCLEAN=$(GOCMD) clean
 GOFMT=$(GOCMD) fmt
 GOTEST=$(GOCMD) test --race
+GOBENCH=$(GOCMD) test -bench=.
 GOOS=js
 GOARCH=wasm
 
@@ -39,11 +40,17 @@ fmt:
 	$(GOFMT) ./...
 
 test: fmt
-	$(GOTEST) ./structi/... ./svg/...
+	$(GOTEST) --race ./structi/... ./svg/...
+
+regression-test:
+	$(GOTEST) -v --race ./structi/... -run TestRegression
+
+benchmark:
+	$(GOBENCH) -benchmem ./structi/... -run=^$
 
 serve:
 	npx http-server ./static --cors
 
 all: clean build-wasm build-cli
 
-.PHONY: build-wasm clean fmt test serve all
+.PHONY: build-wasm clean fmt test serve all benchmark

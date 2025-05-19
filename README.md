@@ -71,7 +71,7 @@ viztruct --format json --struct 'type MyStruct struct { A int8; B int32 }'
 viztruct --svg --struct 'type MyStruct struct { A int8; B int32 }'
 ```
 
-### Analyse and define the optimization strategy
+### Analyze and define the optimization strategy
 ```sh
 viztruct --file ./internal/samples/dumb_service.go --format=txt --strategies=alignment,size,group,greedy
 ```

@@ -205,7 +205,7 @@ func (i Info) optimizeStructLayoutWithStrategies(structType *types.Struct, sizes
 	return bestLayout, nil
 }
 
-// calculate total size of a layout including padding
+// calculate the total size of a struct by looking at the last field's offset and size
 func calculateTotalSize(layout []Field) int64 {
 	if len(layout) == 0 {
 		return 0
@@ -255,18 +255,8 @@ func analyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, s
 			return false
 		}
 
-		// FIXME: repeated code here!
-		originalSize := int64(0)
-		if len(fields) > 0 {
-			last := fields[len(fields)-1]
-			originalSize = last.Offset + last.Size
-		}
-
-		optimizedSize := int64(0)
-		if len(optimizedFields) > 0 {
-			last := optimizedFields[len(optimizedFields)-1]
-			optimizedSize = last.Offset + last.Size
-		}
+		originalSize := calculateTotalSize(fields)
+		optimizedSize := calculateTotalSize(optimizedFields)
 
 		wastedBytes, wastedPercent := tempInfo.WastedSpace()
 
@@ -366,18 +356,8 @@ func processStructWithStrategies(name string, structType *types.Struct, strategy
 		return Info{}, err
 	}
 
-	// calculate sizes using the fields directly
-	originalSize := int64(0)
-	if len(fields) > 0 {
-		last := fields[len(fields)-1]
-		originalSize = last.Offset + last.Size
-	}
-
-	optimizedSize := int64(0)
-	if len(optimizedFields) > 0 {
-		last := optimizedFields[len(optimizedFields)-1]
-		optimizedSize = last.Offset + last.Size
-	}
+	originalSize := calculateTotalSize(fields)
+	optimizedSize := calculateTotalSize(optimizedFields)
 
 	wastedBytes, wastedPercent := tempInfo.WastedSpace()
 
