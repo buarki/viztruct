@@ -1,56 +1,48 @@
-# viztruct - go struct memory layout visualizer
-
-GOCMD=go
-GOBUILD=$(GOCMD) build
-GOCLEAN=$(GOCMD) clean
-GOFMT=$(GOCMD) fmt
-GOTEST=$(GOCMD) test --race
-GOBENCH=$(GOCMD) test -bench=.
-GOOS=js
-GOARCH=wasm
-
 CLI_NAME=viztruct
 WASM_BINARY_NAME=main.wasm
 OUTPUT_DIR=static
 WASM_DIR=cmd/server
 CLI_DIR=cmd/viztruct
-WASM_EXEC_PATH=/usr/local/go/lib/wasm/wasm_exec.js
-
+GO_INSTALL_PATH=$(shell which go)
+WASM_EXEC_PATH=$(GO_INSTALL_PATH)/lib/wasm/wasm_exec.js
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -X main.binVersion=$(VERSION)
 
 default: build
 
 build-wasm:
-	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GOBUILD) -o $(OUTPUT_DIR)/$(WASM_BINARY_NAME) ./$(WASM_DIR)
+	GOOS=js GOARCH=wasm go build -o $(OUTPUT_DIR)/$(WASM_BINARY_NAME) ./$(WASM_DIR)
 
 build-cli:
-	$(GOBUILD) -ldflags "$(LDFLAGS)" -o $(CLI_NAME) ./$(CLI_DIR)
+	go build -ldflags "$(LDFLAGS)" -o $(CLI_NAME) ./$(CLI_DIR)
 
 build: build-wasm build-cli
 
 clean:
-	$(GOCLEAN)
+	go clean
 	rm -f $(OUTPUT_DIR)/$(WASM_BINARY_NAME)
 
 wasm-exec:
 	cp $(WASM_EXEC_PATH) ./static
 
 fmt:
-	$(GOFMT) ./...
+	go fmt ./...
 
 test: fmt
-	$(GOTEST) --race ./structi/... ./svg/...
+	go test ./structi/... ./svg/... -run "^Test[^B]"
+
+test-race: fmt
+	go test --race ./structi/... ./svg/... -run "^Test[^B]"
 
 regression-test:
-	$(GOTEST) -v --race ./structi/... -run TestRegression
+	go test -v --race ./structi/... -run TestRegression
 
 benchmark:
-	$(GOBENCH) -benchmem ./structi/... -run=^$
+	go test -bench=. -benchmem ./structi/... -run=^$
 
 serve:
 	npx http-server ./static --cors
 
 all: clean build-wasm build-cli
 
-.PHONY: build-wasm clean fmt test serve all benchmark
+.PHONY: build-wasm clean fmt test test-race regression-test benchmark serve all

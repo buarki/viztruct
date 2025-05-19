@@ -1,7 +1,5 @@
 package samples
 
-import "time"
-
 /*
 type BadlyAlignedUser struct {
 	IsActive  bool      // 1 byte
@@ -15,6 +13,7 @@ type BadlyAlignedUser struct {
 }
 */
 
+/*
 type ComplicatedUserProfile struct {
 	UserID          uint32 // 4 bytes
 	Activated       bool   // 1 byte
@@ -49,3 +48,4 @@ type ComplicatedUserProfile struct {
 	AccountType       byte              // 1 byte
 	Preferences       map[string]string // 8 bytes (pointer to map)
 }
+*/
