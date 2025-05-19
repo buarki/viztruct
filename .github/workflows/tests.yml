@@ -34,3 +34,5 @@ jobs:
       - name: Run tests
         run: make test
 
+      - name: Regressions
+        run: make regression-test
