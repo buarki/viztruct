@@ -4,12 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"go/ast"
-	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
-	"os"
 	"strings"
+
+	"golang.org/x/tools/go/packages"
 )
 
 type Error struct {
@@ -187,11 +187,11 @@ func (i Info) optimizeStructLayoutWithStrategies(structType *types.Struct, sizes
 		})
 	}
 
-	// Try optimizing with the first optimizer
+	// try optimizing with the first optimizer
 	bestLayout := optimizers[0].Optimize(fields)
 	bestTotalSize := calculateTotalSize(bestLayout)
 
-	// Try other optimizers and keep the best result
+	// try other optimizers and keep the best result
 	for i := 1; i < len(optimizers); i++ {
 		layout := optimizers[i].Optimize(fields)
 		totalSize := calculateTotalSize(layout)
@@ -373,8 +373,8 @@ func processStructWithStrategies(name string, structType *types.Struct, strategy
 	}, nil
 }
 
-// AnalyseStructsWithStrategies analyzes structs from a string with specified optimizers
-func AnalyseStructsWithStrategies(structsSource string, strategyNames []string) ([]Info, error) {
+// AnalyseStructsAsStringWithStrategies analyzes structs from a string with specified optimizers
+func AnalyseStructsAsStringWithStrategies(structsSource string, strategyNames []string) ([]Info, error) {
 	if !strings.Contains(structsSource, "package") {
 		structsSource = "package temp\n\n" + structsSource
 	}
@@ -403,44 +403,44 @@ func AnalyseStructsWithStrategies(structsSource string, strategyNames []string) 
 	return analyzeNestedStructs(node, &customSizes, info, strategyNames)
 }
 
-// AnalyseFromFileWithStrategies analyzes structs from a file path with specified optimizers
-func AnalyseFromFileWithStrategies(filePath string, strategyNames []string) ([]Info, error) {
-	content, err := os.ReadFile(filePath)
+// load all packages in a directory with auto-fetching dependencies
+func loadPackagesFromDirectory(dirPath string) ([]*packages.Package, error) {
+	config := &packages.Config{
+		Mode: packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports | packages.NeedSyntax,
+		Dir:  dirPath,
+	}
+	return packages.Load(config, "./...")
+}
+
+// AnalyseStructsAtDirectoryPath analyzes structs from a directory path with specified optimizers
+func AnalyseStructsAtDirectoryPath(directoryPath string, strategyNames []string) ([][]Info, error) {
+	pkgs, err := loadPackagesFromDirectory(directoryPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to analyse structs from file: %v", err)
+		return nil, err
 	}
 
-	fset := token.NewFileSet()
+	var allInfos [][]Info
 
-	node, err := parser.ParseFile(fset, filePath, content, parser.ParseComments)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse file %s: %v", filePath, err)
+	for _, pkg := range pkgs {
+		var packageInfos []Info
+
+		if len(pkg.Errors) > 0 {
+			fmt.Printf("skipping package %s due to errors: %v\n", pkg.PkgPath, pkg.Errors)
+			continue
+		}
+
+		for _, syntax := range pkg.Syntax {
+			fileInfos, err := collectStructs(syntax, pkg.TypesInfo, strategyNames)
+			if err != nil {
+				return nil, err
+			}
+			packageInfos = append(packageInfos, fileInfos...)
+		}
+
+		if len(packageInfos) > 0 {
+			allInfos = append(allInfos, packageInfos)
+		}
 	}
 
-	// importer that will also import external types
-	sourceImporter := importer.ForCompiler(fset, "source", nil)
-
-	// first pass: type check the file to get all types
-	conf := types.Config{
-		Importer: sourceImporter,
-		Sizes:    &customSizes,
-		Error: func(err error) {
-			fmt.Printf("type checking warning: %v\n", err)
-		},
-	}
-
-	info := &types.Info{
-		Types: make(map[ast.Expr]types.TypeAndValue),
-		Defs:  make(map[*ast.Ident]types.Object),
-		Uses:  make(map[*ast.Ident]types.Object),
-	}
-
-	// type check the file
-	_, err = conf.Check("", fset, []*ast.File{node}, info)
-	if err != nil {
-		// type checking might fail due to external types, but we can still proceed
-		fmt.Printf("warning: type checking failed: %v\n", err)
-	}
-
-	return collectStructs(node, info, strategyNames)
+	return allInfos, nil
 }

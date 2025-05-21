@@ -8,6 +8,7 @@ import (
 	"go/types"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -184,7 +185,7 @@ func TestAnalyzeNestedStructs(t *testing.T) {
 	tests := []struct {
 		name         string
 		src          string
-		expectedInfo []string // Expected struct names (including nested ones)
+		expectedInfo []string // expected struct names (including nested ones)
 	}{
 		{
 			name: "single top-level struct",
@@ -242,7 +243,7 @@ func TestAnalyzeNestedStructs(t *testing.T) {
 				t.Fatalf("type check error: %v", err)
 			}
 
-			results, err := AnalyseStructsWithStrategies(tt.src, nil)
+			results, err := AnalyseStructsAsStringWithStrategies(tt.src, nil)
 			if err != nil {
 				t.Fatalf("error analyzing nested structs: %v", err)
 			}
@@ -407,7 +408,7 @@ func TestAnalyseStructs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			results, err := AnalyseStructsWithStrategies(tt.input, nil)
+			results, err := AnalyseStructsAsStringWithStrategies(tt.input, nil)
 
 			if tt.wantErr {
 				if err == nil {
@@ -429,101 +430,7 @@ func TestAnalyseStructs(t *testing.T) {
 	}
 }
 
-func TestAnalyseFromFile(t *testing.T) {
-	tempDir := t.TempDir()
-	testFilePath := filepath.Join(tempDir, "test_struct.go")
-
-	testFileContent := `package test
-
-import (
-	"time"
-)
-
-type SimpleStruct struct {
-	A int64
-	B int32
-	C bool
-}
-
-type ComplexStruct struct {
-	ID        string
-	Data      SimpleStruct
-	Values    []int
-	Mapping   map[string]int
-	Timestamp time.Time
-}
-`
-
-	err := os.WriteFile(testFilePath, []byte(testFileContent), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	structs, err := AnalyseFromFileWithStrategies(testFilePath, nil)
-	if err != nil {
-		t.Fatalf("AnalyseFromFile failed: %v", err)
-	}
-
-	if len(structs) != 2 {
-		t.Errorf("Expected 2 structs, got %d", len(structs))
-	}
-
-	var simpleStruct *Info
-	var complexStruct *Info
-
-	for i := range structs {
-		if structs[i].Name == "SimpleStruct" {
-			simpleStruct = &structs[i]
-		} else if structs[i].Name == "ComplexStruct" {
-			complexStruct = &structs[i]
-		}
-	}
-
-	if simpleStruct == nil {
-		t.Fatalf("SimpleStruct not found in results")
-	}
-
-	nonPaddingFields := 0
-	for _, field := range simpleStruct.Fields {
-		if !field.IsPadding {
-			nonPaddingFields++
-		}
-	}
-
-	if nonPaddingFields != 3 {
-		t.Errorf("Expected 3 non-padding fields in SimpleStruct, got %d", nonPaddingFields)
-	}
-
-	if complexStruct == nil {
-		t.Fatalf("ComplexStruct not found in results")
-	}
-
-	nonPaddingFields = 0
-	for _, field := range complexStruct.Fields {
-		if !field.IsPadding {
-			nonPaddingFields++
-		}
-	}
-
-	if nonPaddingFields != 5 {
-		t.Errorf("Expected 5 non-padding fields in ComplexStruct, got %d", nonPaddingFields)
-	}
-
-	timeFieldFound := false
-	for _, field := range complexStruct.Fields {
-		if !field.IsPadding && field.Name == "Timestamp" && field.TypeName == "time.Time" {
-			timeFieldFound = true
-			break
-		}
-	}
-
-	if !timeFieldFound {
-		t.Errorf("time.Time field not properly resolved in ComplexStruct")
-	}
-}
-
 func TestCollectFieldOptmizers(t *testing.T) {
-	// Create a mock type for testing
 	mockType := &MockType{}
 
 	tests := []struct {
@@ -625,14 +532,13 @@ func TestCollectFieldOptmizers(t *testing.T) {
 				copy(originalFields, testFields)
 
 				for _, opt := range optimizers {
-					// Call Optimize instead of ArrangeFields
 					result := opt.Optimize(testFields)
 
 					if !reflect.DeepEqual(testFields, originalFields) {
 						t.Errorf("optimizer %s modified the input slice", opt.Name())
 					}
 
-					// Count non-padding fields in the result
+					// count non-padding fields in the result
 					nonPaddingCount := 0
 					for _, f := range result {
 						if !f.IsPadding {
@@ -650,7 +556,110 @@ func TestCollectFieldOptmizers(t *testing.T) {
 	}
 }
 
-// MockType implements types.Type for testing
+func TestAnalyseStructsAtDirectoryPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	goModContent := `module testmodule
+
+go 1.20
+`
+	err := os.WriteFile(filepath.Join(tempDir, "go.mod"), []byte(goModContent), 0644)
+	if err != nil {
+		t.Fatalf("failed to create go.mod file: %v", err)
+	}
+
+	structFileContent := `
+package testmodule
+
+// Struct with various field types and alignments
+type TestStruct struct {
+	A int64   // 8 bytes, 8-byte alignment
+	B bool    // 1 byte, 1-byte alignment
+	C int32   // 4 bytes, 4-byte alignment
+	D string  // 16 bytes, 8-byte alignment
+}
+
+// Another struct to test multiple struct detection
+type AnotherStruct struct {
+	X float64 // 8 bytes, 8-byte alignment
+	Y []byte  // 24 bytes, 8-byte alignment
+}
+`
+	structFilePath := filepath.Join(tempDir, "structs.go")
+	err = os.WriteFile(structFilePath, []byte(structFileContent), 0644)
+	if err != nil {
+		t.Fatalf("failed to create struct file: %v", err)
+	}
+
+	t.Run("Test directory with Go module", func(t *testing.T) {
+		_, err := exec.LookPath("go")
+		if err != nil {
+			t.Skip("go executable not found in PATH, skipping test")
+		}
+
+		results, err := AnalyseStructsAtDirectoryPath(tempDir, nil)
+		if err != nil && strings.Contains(err.Error(), "fork/exec") {
+			t.Skipf("skipping test due to toolchain error: %v", err)
+			return
+		}
+
+		if err != nil {
+			t.Fatalf("AnalyseStructsAtDirectoryPath failed: %v", err)
+		}
+
+		if len(results) == 0 {
+			t.Fatal("expected at least one package, got none")
+		}
+
+		var foundTestStruct, foundAnotherStruct bool
+		for _, pkg := range results {
+			for _, info := range pkg {
+				if info.Name == "TestStruct" {
+					foundTestStruct = true
+					validateStructInfo(t, info, "TestStruct", 4) // 4 fields expected
+				} else if info.Name == "AnotherStruct" {
+					foundAnotherStruct = true
+					validateStructInfo(t, info, "AnotherStruct", 2) // 2 fields expected
+				}
+			}
+		}
+
+		if !foundTestStruct {
+			t.Error("TestStruct not found in analysis results")
+		}
+		if !foundAnotherStruct {
+			t.Error("AnotherStruct not found in analysis results")
+		}
+	})
+}
+
+func validateStructInfo(t *testing.T, info Info, structName string, expectedFieldCount int) {
+	t.Helper()
+
+	if info.OriginalSize == 0 {
+		t.Errorf("%s: original size is zero", structName)
+	}
+	if info.OptimizedSize == 0 {
+		t.Errorf("%s: optimized size is zero", structName)
+	}
+
+	var fieldCount int
+	for _, field := range info.Fields {
+		if !field.IsPadding {
+			fieldCount++
+		}
+	}
+
+	if fieldCount != expectedFieldCount {
+		t.Errorf("%s: expected %d non-padding fields, got %d",
+			structName, expectedFieldCount, fieldCount)
+	}
+
+	if len(info.OptimizedFields) == 0 {
+		t.Errorf("%s: optimized fields not populated", structName)
+	}
+}
+
 type MockType struct{}
 
 func (m *MockType) Underlying() types.Type { return m }
