@@ -77,14 +77,29 @@ func processResults(structGroups [][]structi.Info, format OutputFormat, generate
 	}
 
 	if generateSVG {
-		svgOutput, err := svg.BuildVisualization(allStructs)
+		svgOutputMap, err := svg.BuildVisualization(allStructs)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error building SVG: %v\n", err)
 			os.Exit(1)
 		}
-		err = os.WriteFile(svgFile, []byte(svgOutput), 0644)
+
+		for structName, svgContent := range svgOutputMap {
+			fileName := fmt.Sprintf("%s.svg", structName)
+			err = os.WriteFile(fileName, []byte(svgContent), 0644)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error writing svg file %s: %v\n", fileName, err)
+				os.Exit(1)
+			}
+		}
+
+		combinedSvgOutput, err := svg.BuildSingleVisualization(allStructs)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error writing svg file: %v\n", err)
+			fmt.Fprintf(os.Stderr, "error building combined SVG: %v\n", err)
+			os.Exit(1)
+		}
+		err = os.WriteFile(svgFile, []byte(combinedSvgOutput), 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error writing combined svg file: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -198,7 +213,10 @@ func processResults(structGroups [][]structi.Info, format OutputFormat, generate
 			}
 		}
 
-		if len(structGroups) > 1 {
+		if len(allStructs) > 1 {
+			fmt.Println("\n" + strings.Repeat("=", 80))
+			fmt.Println("OVERALL SUMMARY")
+			fmt.Println(strings.Repeat("=", 80))
 			outputOverallSummary(allStructs)
 		}
 	}

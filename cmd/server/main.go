@@ -31,7 +31,7 @@ func generateStructLayoutSVG(this js.Value, args []js.Value) any {
 	// reading passed struct code from JavaScript
 	structCode := args[0].String()
 
-	svgBytes, optimizedCode, err := generateSVGAndCode(structCode)
+	svgBytes, optimizedCode, byteSavings, err := generateSVGAndCode(structCode)
 	if err != nil {
 		return js.ValueOf(map[string]any{
 			"error": err.Error(),
@@ -47,22 +47,28 @@ func generateStructLayoutSVG(this js.Value, args []js.Value) any {
 	return js.ValueOf(map[string]any{
 		"svg":           svgArray,
 		"optimizedCode": codeArray,
+		"byteSavings":   byteSavings,
 	})
 }
 
-func generateSVGAndCode(structCode string) ([]byte, []byte, error) {
+func generateSVGAndCode(structCode string) ([]byte, []byte, map[string]any, error) {
 	structInfos, err := structi.AnalyseStructsAsStringWithStrategies(structCode, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	svgContent, err := svg.BuildVisualization(structInfos)
+	svgContent, err := svg.BuildSingleVisualization(structInfos)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to build svg: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to build svg: %v", err)
 	}
 
 	var optimizedCode strings.Builder
 	optimizedCode.WriteString("// Optimized struct definitions:\n\n")
+
+	var totalOriginalSize int64
+	var totalOptimizedSize int64
+	byteSavings := make(map[string]any)
+
 	for _, si := range structInfos {
 		optimizedCode.WriteString(fmt.Sprintf("type %s struct {\n", si.Name+"Optimized"))
 		for _, field := range si.OptimizedFields {
@@ -71,7 +77,18 @@ func generateSVGAndCode(structCode string) ([]byte, []byte, error) {
 			}
 		}
 		optimizedCode.WriteString("}\n\n")
+
+		totalOriginalSize += si.OriginalSize
+		totalOptimizedSize += si.OptimizedSize
 	}
 
-	return []byte(svgContent), []byte(optimizedCode.String()), nil
+	bytesSavedPerStruct := totalOriginalSize - totalOptimizedSize
+	byteSavingsAtScale := bytesSavedPerStruct * 1000000 // 1 million structs
+
+	byteSavings["perStruct"] = bytesSavedPerStruct
+	byteSavings["perMillion"] = byteSavingsAtScale
+	byteSavings["originalSize"] = totalOriginalSize
+	byteSavings["optimizedSize"] = totalOptimizedSize
+
+	return []byte(svgContent), []byte(optimizedCode.String()), byteSavings, nil
 }
