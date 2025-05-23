@@ -1,0 +1,24 @@
+=======================================
+Viztruct Performance Benchmark
+=======================================
+Date: Fri May 23 03:32:26 UTC 2025
+Go version: go version go1.24.2 linux/amd64
+=======================================
+
+Cloning github.com/drone/autoscaler...
+===== Cold Run (JSON): github.com/drone/autoscaler =====
+Cleared Go cache
+Time taken: 46.530053800 seconds
+
+===== Second Run (JSON): github.com/drone/autoscaler =====
+Time taken: .773829959 seconds
+
+===== Cold Run (SVG): github.com/drone/autoscaler =====
+Cleared Go cache
+Time taken: 46.422433952 seconds
+
+===== Second Run (SVG): github.com/drone/autoscaler =====
+Time taken: .774148375 seconds
+
+---------------------------------------
+Benchmark completed!

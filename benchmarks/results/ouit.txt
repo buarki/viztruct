@@ -1,0 +1,75 @@
+  docker run --rm viztruct-benchmark
+=======================================
+Viztruct Performance Benchmark
+=======================================
+Date: Fri May 23 02:51:45 UTC 2025
+Go version: go version go1.24.2 linux/amd64
+=======================================
+
+Fetching github.com/drone/drone-go...
+go: go.mod file not found in current directory or any parent directory.
+	'go get' is no longer supported outside a module.
+	To build and install a command, use 'go install' with a version,
+	like 'go install example.com/cmd@latest'
+	For more information, see https://golang.org/doc/go-get-install-deprecation
+	or run 'go help get' or 'go help install'.
+===== Cold Run (JSON): github.com/drone/drone-go =====
+Cleared Go cache
+Time taken: .036924750 seconds
+
+===== Second Run (JSON): github.com/drone/drone-go =====
+Time taken: .033369667 seconds
+
+===== Cold Run (SVG): github.com/drone/drone-go =====
+Cleared Go cache
+Time taken: .033815000 seconds
+
+===== Second Run (SVG): github.com/drone/drone-go =====
+Time taken: .029970958 seconds
+
+---------------------------------------
+Fetching github.com/drone/autoscaler...
+go: go.mod file not found in current directory or any parent directory.
+	'go get' is no longer supported outside a module.
+	To build and install a command, use 'go install' with a version,
+	like 'go install example.com/cmd@latest'
+	For more information, see https://golang.org/doc/go-get-install-deprecation
+	or run 'go help get' or 'go help install'.
+===== Cold Run (JSON): github.com/drone/autoscaler =====
+Cleared Go cache
+Time taken: .030361250 seconds
+
+===== Second Run (JSON): github.com/drone/autoscaler =====
+Time taken: .033148875 seconds
+
+===== Cold Run (SVG): github.com/drone/autoscaler =====
+Cleared Go cache
+Time taken: .030690584 seconds
+
+===== Second Run (SVG): github.com/drone/autoscaler =====
+Time taken: .032988292 seconds
+
+---------------------------------------
+Fetching github.com/kubernetes/kubernetes/pkg/controller...
+go: go.mod file not found in current directory or any parent directory.
+	'go get' is no longer supported outside a module.
+	To build and install a command, use 'go install' with a version,
+	like 'go install example.com/cmd@latest'
+	For more information, see https://golang.org/doc/go-get-install-deprecation
+	or run 'go help get' or 'go help install'.
+===== Cold Run (JSON): github.com/kubernetes/kubernetes/pkg/controller =====
+Cleared Go cache
+Time taken: .034625792 seconds
+
+===== Second Run (JSON): github.com/kubernetes/kubernetes/pkg/controller =====
+Time taken: .033367750 seconds
+
+===== Cold Run (SVG): github.com/kubernetes/kubernetes/pkg/controller =====
+Cleared Go cache
+Time taken: .034005083 seconds
+
+===== Second Run (SVG): github.com/kubernetes/kubernetes/pkg/controller =====
+Time taken: .034570375 seconds
+
+---------------------------------------
+Benchmark completed!

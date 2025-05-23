@@ -40,6 +40,13 @@ regression-test:
 benchmark:
 	go test -bench=. -benchmem ./structi/... -run=^$
 
+running_time:
+	@result_path=./benchmarks/results/$$(date +%Y-%m-%d_%H-%M-%S); \
+	docker build -f benchmarks/Dockerfile -t viztruct-benchmark .; \
+	docker run --rm viztruct-benchmark >> $$result_path; \
+	echo "Result saved to $$result_path"
+
+
 serve:
 	npx http-server ./static --cors
 
