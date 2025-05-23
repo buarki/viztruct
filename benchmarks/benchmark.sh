@@ -2,9 +2,9 @@
 
 # set repositories to analyze with their GitHub URLs
 declare -A REPOS=(
-  #["github.com/drone/drone-go"]="https://github.com/drone/drone-go.git"
-  ["github.com/drone/autoscaler"]="https://github.com/drone/autoscaler.git"
-  #["github.com/kubernetes/kubernetes"]="https://github.com/kubernetes/kubernetes.git"
+  ["github.com/drone/drone-go"]="https://github.com/drone/drone-go.git" # mid size
+  ["github.com/drone/autoscaler"]="https://github.com/drone/autoscaler.git" # small size
+  ["github.com/kubernetes/kubernetes"]="https://github.com/kubernetes/kubernetes.git" # large size
 )
 
 mkdir -p /benchmark/repos

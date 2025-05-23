@@ -1,0 +1,56 @@
+=======================================
+Viztruct Performance Benchmark
+=======================================
+Date: Fri May 23 03:39:24 UTC 2025
+Go version: go version go1.24.2 linux/amd64
+=======================================
+
+Cloning github.com/drone/autoscaler...
+===== Cold Run (JSON): github.com/drone/autoscaler =====
+Cleared Go cache
+Time taken: 48.485485675 seconds
+
+===== Second Run (JSON): github.com/drone/autoscaler =====
+Time taken: .819447125 seconds
+
+===== Cold Run (SVG): github.com/drone/autoscaler =====
+Cleared Go cache
+Time taken: 58.800541582 seconds
+
+===== Second Run (SVG): github.com/drone/autoscaler =====
+Time taken: 8.769708865 seconds
+
+---------------------------------------
+Cloning github.com/kubernetes/kubernetes...
+===== Cold Run (JSON): github.com/kubernetes/kubernetes/pkg/controller =====
+Cleared Go cache
+Time taken: 132.961261867 seconds
+
+===== Second Run (JSON): github.com/kubernetes/kubernetes/pkg/controller =====
+Time taken: 2.150164960 seconds
+
+===== Cold Run (SVG): github.com/kubernetes/kubernetes/pkg/controller =====
+Cleared Go cache
+Time taken: 138.112361925 seconds
+
+===== Second Run (SVG): github.com/kubernetes/kubernetes/pkg/controller =====
+Time taken: 2.183098835 seconds
+
+---------------------------------------
+Cloning github.com/drone/drone-go...
+===== Cold Run (JSON): github.com/drone/drone-go =====
+Cleared Go cache
+Time taken: 19.257982120 seconds
+
+===== Second Run (JSON): github.com/drone/drone-go =====
+Time taken: .491223292 seconds
+
+===== Cold Run (SVG): github.com/drone/drone-go =====
+Cleared Go cache
+Time taken: 19.701475162 seconds
+
+===== Second Run (SVG): github.com/drone/drone-go =====
+Time taken: .472967959 seconds
+
+---------------------------------------
+Benchmark completed!
