@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"strings"
 
 	svgTemplate "github.com/buarki/viztruct/internal/viz/template"
 	"github.com/buarki/viztruct/structi"
@@ -12,6 +13,7 @@ import (
 const (
 	blockHeight = 40
 	paddingX    = 10
+	barWidth    = 350
 )
 
 var typeColors = map[string]string{
@@ -75,11 +77,60 @@ func getTypeColor(typeName string) string {
 	return typeColors["unknown"]
 }
 
-func BuildVisualization(structs []structi.Info) (string, error) {
+// BuildVisualization generates SVG visualizations for each struct in the provided slice
+// and returns a map of struct names to SVG content
+func BuildVisualization(structs []structi.Info) (map[string]string, error) {
 	tmpl := template.New("svg_template").Funcs(template.FuncMap{
 		"add": func(a, b float64) float64 { return a + b },
 		"sub": func(a, b float64) float64 { return a - b },
 		"mul": func(a, b float64) float64 { return a * b },
+		"div": func(a, b float64) float64 { return a / b },
+		"float64": func(i interface{}) float64 {
+			switch v := i.(type) {
+			case int:
+				return float64(v)
+			case int64:
+				return float64(v)
+			case float64:
+				return v
+			default:
+				return 0
+			}
+		},
+		"lt": func(a, b int64) bool { return a < b },
+	})
+
+	tmpl, err := tmpl.Parse(svgTemplate.StructLayoutTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing template: %v", err)
+	}
+
+	svgMap := make(map[string]string)
+
+	for _, structInfo := range structs {
+		var result bytes.Buffer
+		result.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n")
+
+		data := prepareTemplateData(structInfo)
+		err = tmpl.ExecuteTemplate(&result, "struct_layout", data)
+		if err != nil {
+			return nil, fmt.Errorf("error executing template for struct %s: %v", structInfo.Name, err)
+		}
+
+		fileName := sanitizeFileName(structInfo.Name)
+		svgMap[fileName] = result.String()
+	}
+
+	return svgMap, nil
+}
+
+// BuildSingleVisualization generates a combined SVG visualization for all structs
+func BuildSingleVisualization(structs []structi.Info) (string, error) {
+	tmpl := template.New("svg_template").Funcs(template.FuncMap{
+		"add": func(a, b float64) float64 { return a + b },
+		"sub": func(a, b float64) float64 { return a - b },
+		"mul": func(a, b float64) float64 { return a * b },
+		"div": func(a, b float64) float64 { return a / b },
 		"float64": func(i interface{}) float64 {
 			switch v := i.(type) {
 			case int:
@@ -103,9 +154,8 @@ func BuildVisualization(structs []structi.Info) (string, error) {
 	var result bytes.Buffer
 	result.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n")
 
-	width := 1200.0 - (2 * paddingX)
 	for _, structInfo := range structs {
-		data := prepareTemplateData(structInfo, width)
+		data := prepareTemplateData(structInfo)
 		err = tmpl.ExecuteTemplate(&result, "struct_layout", data)
 		if err != nil {
 			return "", fmt.Errorf("error executing template: %v", err)
@@ -115,22 +165,32 @@ func BuildVisualization(structs []structi.Info) (string, error) {
 	return result.String(), nil
 }
 
-func prepareTemplateData(info structi.Info, width float64) TemplateData {
+// sanitizeFileName sanitizes a struct name to be used as a file name
+func sanitizeFileName(name string) string {
+	// replace invalid filename characters with underscores
+	replacer := strings.NewReplacer(
+		" ", "_",
+		"/", "_",
+		"\\", "_",
+		":", "_",
+		"*", "_",
+		"?", "_",
+		"\"", "_",
+		"<", "_",
+		">", "_",
+		"|", "_",
+	)
+	return replacer.Replace(name)
+}
+
+func prepareTemplateData(info structi.Info) TemplateData {
 	wastedBytes, wastedPercent := info.WastedSpace()
 	_, optimizedWastedPercent := info.OptimizedWastedSpace()
 	structTotalSize := info.TotalSize()
 	optimizedSize := info.OptimizedTotalSize()
 
-	scale := width / float64(structTotalSize)
-	if structTotalSize == 0 {
-		scale = width // to avoid division by zero
-	}
-
 	var fields []FieldData
 	for _, f := range info.Fields {
-		blockX := paddingX + float64(f.Offset)*scale
-		blockWidth := float64(f.Size) * scale
-
 		color := getTypeColor(f.TypeName)
 		if f.IsPadding {
 			if f.Offset+f.Size == structTotalSize {
@@ -142,9 +202,9 @@ func prepareTemplateData(info structi.Info, width float64) TemplateData {
 
 		field := FieldData{
 			Name:        f.Name,
-			LabelX:      blockX + blockWidth/2,
-			X:           blockX,
-			Width:       blockWidth,
+			LabelX:      float64(paddingX),
+			X:           float64(paddingX),
+			Width:       float64(barWidth),
 			Color:       color,
 			Offset:      f.Offset,
 			Size:        f.Size,
@@ -156,12 +216,9 @@ func prepareTemplateData(info structi.Info, width float64) TemplateData {
 
 	var optimizedFields []FieldData
 	for _, f := range info.OptimizedFields {
-		blockX := paddingX + float64(f.Offset)*scale
-		blockWidth := float64(f.Size) * scale
-
 		color := getTypeColor(f.TypeName)
 		if f.IsPadding {
-			if f.Offset+f.Size == structTotalSize {
+			if f.Offset+f.Size == optimizedSize {
 				color = getTypeColor("tail_padding")
 			} else {
 				color = getTypeColor("padding")
@@ -170,9 +227,9 @@ func prepareTemplateData(info structi.Info, width float64) TemplateData {
 
 		field := FieldData{
 			Name:        f.Name,
-			LabelX:      blockX + blockWidth/2,
-			X:           blockX,
-			Width:       blockWidth,
+			LabelX:      float64(paddingX),
+			X:           float64(paddingX),
+			Width:       float64(barWidth),
 			Color:       color,
 			Offset:      f.Offset,
 			Size:        f.Size,
@@ -213,8 +270,8 @@ func prepareTemplateData(info structi.Info, width float64) TemplateData {
 		OptimizedFields:       optimizedFields,
 		FieldBreakdown:        fieldBreakdown,
 		OptimizedFieldsCode:   optimizedFieldsCode,
-		LastOffsetX:           paddingX + float64(structTotalSize)*scale,
-		OptimizedLastX:        paddingX + float64(optimizedSize)*scale,
+		LastOffsetX:           float64(paddingX + barWidth),
+		OptimizedLastX:        float64(paddingX + barWidth),
 		BlockHeight:           float64(blockHeight),
 	}
 }

@@ -122,7 +122,15 @@
             margin-top: 20px;
             border: 1px solid #ddd;
             padding: 10px;
+            position: relative;
             overflow: auto;
+            max-height: none; /* Ensure no height restriction */
+        }
+        /* Make sure SVGs can expand to their full height */
+        #svgOutput svg {
+            height: auto !important;
+            width: 100%;
+            max-width: 1200px;
         }
         .examples {
             margin-bottom: 20px;
@@ -162,7 +170,19 @@
             gap: 10px;
         }
         
-        /* Responsive styles */
+        .savings-banner {
+            background-color: #34A853;
+            color: white;
+            padding: 12px 15px;
+            font-weight: bold;
+            font-size: 16px;
+            text-align: center;
+            border-radius: 4px 4px 0 0;
+            margin-bottom: 0;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
         @media (max-width: 768px) {
             .container {
                 flex-direction: column;
@@ -171,7 +191,7 @@
                 width: 100%;
             }
             .CodeMirror {
-                height: 200px; /* Slightly smaller height on mobile */
+                height: 200px; 
             }
             h1 {
                 font-size: 1.5rem;
@@ -255,6 +275,10 @@
                     <textarea id="optimizedOutput">// Optimized structs will appear here</textarea>
                 </div>
             </div>
+        </div>
+        
+        <div id="memorySavings" style="display: none;">
+            <!-- This div will be populated with savings banners -->
         </div>
         
         <div id="svgOutput"></div>
@@ -343,6 +367,103 @@ type Rectangle struct {
             });
         }
         
+        function formatBytesAtScale(bytes) {
+            if (bytes < 1024) {
+                return bytes + ' bytes';
+            } else if (bytes < 1024 * 1024) {
+                return (bytes / 1024).toFixed(2) + ' KB';
+            } else if (bytes < 1024 * 1024 * 1024) {
+                return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+            } else {
+                return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+            }
+        }
+        
+        // it will inject the memory savings into the svg
+        function injectMemorySavingsIntoSVG(svgString, byteSavings) {
+            const wrappedSvg = `<div>${svgString}</div>`;
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(wrappedSvg, "text/html");
+            const svgs = doc.querySelectorAll("svg");
+            
+            if (svgs.length === 0) return svgString;
+            
+            // calculate total bytes saved across all structs for verification
+            let totalBytesSaved = 0;
+            
+            svgs.forEach((svg, index) => {
+                const textElements = svg.querySelectorAll("text");
+                let structNameElement = null;
+                let optimizedLayoutElement = null;
+                let originalSizeElement = null;
+                let optimizedSizeElement = null;
+                let svgWidth = parseInt(svg.getAttribute("width")) || 1000;
+                
+                let structName = "";
+                let bytesSaved = 0;
+                let originalSize = 0;
+                let optimizedSize = 0;
+                
+                for (const textElement of textElements) {
+                    const text = textElement.textContent;
+                    
+                    if (text && !text.includes(":") && !structName) {
+                        structName = text.trim();
+                    }
+                    
+                    if (text.includes("Total size:")) {
+                        originalSizeElement = textElement;
+                        const sizeMatch = text.match(/Total size: (\d+) bytes/);
+                        if (sizeMatch && sizeMatch[1]) {
+                            originalSize = parseInt(sizeMatch[1], 10);
+                        }
+                    }
+                    
+                    if (text.includes("Optimized layout:")) {
+                        optimizedLayoutElement = textElement;
+                        
+                        const layoutMatch = text.match(/Optimized layout: (\d+) bytes \(saved (\d+) bytes/);
+                        if (layoutMatch && layoutMatch[1] && layoutMatch[2]) {
+                            optimizedSize = parseInt(layoutMatch[1], 10);
+                            bytesSaved = parseInt(layoutMatch[2], 10);
+                            totalBytesSaved += bytesSaved;
+                        }
+                    }
+                }
+                
+                let structSavingsPerMillion = 0;
+                if (bytesSaved > 0) {
+                    structSavingsPerMillion = bytesSaved * 1000000; // 1 million instances
+                }
+                
+                const savingsText = formatBytesAtScale(structSavingsPerMillion);
+                console.log(`Struct: ${structName}, Original size: ${originalSize}, Optimized size: ${optimizedSize}, Bytes saved: ${bytesSaved}, Per million: ${savingsText}`);
+                
+                if (optimizedLayoutElement) {
+                    const y = parseFloat(optimizedLayoutElement.getAttribute("y"));
+                    
+                    const savingsElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    savingsElement.setAttribute("x", svgWidth - 40);
+                    savingsElement.setAttribute("y", y);
+                    savingsElement.setAttribute("fill", "#34A853");
+                    savingsElement.setAttribute("font-weight", "bold");
+                    savingsElement.setAttribute("text-anchor", "end");
+                    savingsElement.textContent = `Memory savings at scale: ${savingsText} per million allocations`;
+                    
+                    svg.appendChild(savingsElement);
+                }
+            });
+            
+            console.log(`Total bytes saved across all structs: ${totalBytesSaved}`);
+            
+            const result = [];
+            svgs.forEach(svg => {
+                result.push(svg.outerHTML);
+            });
+            
+            return result.join("");
+        }
+        
         async function visualizeGoStruct() {
             const structInput = inputEditor ? inputEditor.getValue() : document.getElementById('structInput').value;
             
@@ -361,7 +482,7 @@ type Rectangle struct {
                     return;
                 }
                 
-                const svgString = new TextDecoder().decode(result.svg);
+                let svgString = new TextDecoder().decode(result.svg);
                 const optimizedCode = new TextDecoder().decode(result.optimizedCode);
                 
                 if (outputEditor) {
@@ -371,10 +492,16 @@ type Rectangle struct {
                     document.getElementById('optimizedOutput').value = optimizedCode;
                 }
                 
+                if (result.byteSavings) {
+                    console.log("Byte savings from WASM:", result.byteSavings);
+                    svgString = injectMemorySavingsIntoSVG(svgString, result.byteSavings);
+                }
+                
                 document.getElementById('errorOutput').textContent = '';
                 document.getElementById('svgOutput').innerHTML = svgString;
                 
             } catch (err) {
+                console.error("Error visualizing struct:", err);
                 document.getElementById('errorOutput').textContent = 'Error: ' + err.message;
             }
         }
