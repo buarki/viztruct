@@ -1,6 +1,0 @@
-type BadLayout struct {
-    Active    bool
-    ID        uint64
-    Confirmed bool
-    Age       uint32
-}
