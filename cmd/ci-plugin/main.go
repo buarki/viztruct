@@ -12,8 +12,7 @@ import (
 	"github.com/buarki/viztruct/structi"
 )
 
-// StructSummary stores summary information about analyzed structs
-type StructSummary struct {
+type structSummary struct {
 	Name             string
 	FilePath         string
 	OriginalSize     int64
@@ -49,14 +48,12 @@ func main() {
 		}
 	}
 
-	fmt.Println(">>>", goFiles)
-
 	if len(goFiles) == 0 {
 		fmt.Println("No Go files changed in this commit range")
 		return
 	}
 
-	var allStructs []StructSummary
+	var allStructs []structSummary
 
 	analyzedDirs := make(map[string]bool)
 
@@ -101,7 +98,7 @@ func main() {
 	}
 }
 
-func analyzeFile(filePath string, verbose, quietMode bool) ([]structi.Info, []StructSummary) {
+func analyzeFile(filePath string, verbose, quietMode bool) ([]structi.Info, []structSummary) {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		if !quietMode {
 			fmt.Printf("  Error: file does not exist: %s\n", filePath)
@@ -139,7 +136,7 @@ func analyzeFile(filePath string, verbose, quietMode bool) ([]structi.Info, []St
 	}
 
 	var filteredStructs []structi.Info
-	var summaries []StructSummary
+	var summaries []structSummary
 
 	targetFile := filepath.Base(filePath)
 
@@ -148,27 +145,22 @@ func analyzeFile(filePath string, verbose, quietMode bool) ([]structi.Info, []St
 	}
 
 	for _, s := range allStructs {
-		// Calculate waste percentage
 		wastePercentage := 0.0
 		if s.OriginalSize > 0 {
 			wastePercentage = float64(s.WastedBytes) / float64(s.OriginalSize) * 100
 		}
 
-		// Calculate potential savings
 		potentialSavings := s.OriginalSize - s.OptimizedSize
 		savingsPercentage := 0.0
 		if s.OriginalSize > 0 {
 			savingsPercentage = float64(potentialSavings) / float64(s.OriginalSize) * 100
 		}
 
-		// For now, we'll include all structs from the directory
-		// In a real CI plugin, you'd want to filter only structs from the changed file
 		filteredStructs = append(filteredStructs, s)
 
-		// Add to summary data
-		summaries = append(summaries, StructSummary{
+		summaries = append(summaries, structSummary{
 			Name:             s.Name,
-			FilePath:         filePath, // We don't know the actual file for each struct
+			FilePath:         filePath, // we don't know the actual file for each struct
 			OriginalSize:     s.OriginalSize,
 			WastedBytes:      s.WastedBytes,
 			WastedPercent:    wastePercentage,
@@ -200,27 +192,21 @@ func analyzeFile(filePath string, verbose, quietMode bool) ([]structi.Info, []St
 	return filteredStructs, summaries
 }
 
-// printStructSummary prints a summary of all analyzed structs
-func printStructSummary(structs []StructSummary) {
+func printStructSummary(structs []structSummary) {
 	fmt.Println("\n====== STRUCT OPTIMIZATION SUMMARY ======")
 	fmt.Printf("Total structs analyzed: %d\n\n", len(structs))
 
-	// Sort structs by waste percentage
 	sort.Slice(structs, func(i, j int) bool {
 		return structs[i].WastedPercent > structs[j].WastedPercent
 	})
 
-	// Print header
 	fmt.Printf("%-30s %-40s %-10s %-15s %-15s\n",
 		"Struct Name", "File", "Size", "Wasted %", "Savings %")
 	fmt.Println(strings.Repeat("-", 110))
 
-	// Print each struct
 	for _, s := range structs {
-		// Get just the base file name for display
 		baseFileName := filepath.Base(s.FilePath)
 
-		// Truncate filename if too long
 		if len(baseFileName) > 38 {
 			baseFileName = "..." + baseFileName[len(baseFileName)-35:]
 		}
@@ -233,7 +219,6 @@ func printStructSummary(structs []StructSummary) {
 			s.SavingsPercent)
 	}
 
-	// Calculate totals
 	var totalSize, totalWasted, totalSavings int64
 	for _, s := range structs {
 		totalSize += s.OriginalSize
@@ -241,7 +226,6 @@ func printStructSummary(structs []StructSummary) {
 		totalSavings += s.PotentialSavings
 	}
 
-	// Calculate percentages
 	wastedPercent := 0.0
 	savingsPercent := 0.0
 	if totalSize > 0 {
@@ -249,12 +233,10 @@ func printStructSummary(structs []StructSummary) {
 		savingsPercent = float64(totalSavings) / float64(totalSize) * 100
 	}
 
-	// Print totals
 	fmt.Println(strings.Repeat("-", 110))
 	fmt.Printf("%-30s %-40s %-10d %-15.2f %-15.2f\n",
 		"TOTAL", "", totalSize, wastedPercent, savingsPercent)
 
-	// Categorize structs
 	var highWaste, mediumWaste, lowWaste int
 	for _, s := range structs {
 		if s.WastedPercent >= 15 {
@@ -277,7 +259,6 @@ func printStructSummary(structs []StructSummary) {
 	}
 }
 
-// truncateString truncates a string if it's longer than the specified length
 func truncateString(s string, maxLength int) string {
 	if len(s) <= maxLength {
 		return s
