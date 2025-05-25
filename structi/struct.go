@@ -7,10 +7,66 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"runtime"
 	"strings"
+	"sync"
+	"time"
 
 	"golang.org/x/tools/go/packages"
 )
+
+// Configuration variables
+var (
+	maxPackages = 1500             // Maximum number of packages to analyze
+	verboseMode = false            // Whether to print verbose output
+	skipErrors  = true             // Whether to skip packages with errors
+	timeout     = 300              // Timeout in seconds for package loading
+	concurrency = runtime.NumCPU() // Number of concurrent workers
+)
+
+// SetMaxPackages sets the maximum number of packages to analyze
+func SetMaxPackages(max int) {
+	if max <= 0 {
+		maxPackages = 0 // No limit
+	} else {
+		maxPackages = max
+	}
+}
+
+// SetVerboseMode enables or disables verbose output
+func SetVerboseMode(verbose bool) {
+	verboseMode = verbose
+}
+
+// SetSkipErrors sets whether to skip packages with errors
+func SetSkipErrors(skip bool) {
+	skipErrors = skip
+}
+
+// SetTimeout sets the timeout in seconds for package loading
+func SetTimeout(seconds int) {
+	if seconds <= 0 {
+		timeout = 0 // No timeout
+	} else {
+		timeout = seconds
+	}
+}
+
+// SetConcurrency sets the number of concurrent workers
+func SetConcurrency(workers int) {
+	if workers <= 0 {
+		concurrency = runtime.NumCPU()
+	} else {
+		concurrency = workers
+	}
+}
+
+// logf prints a message if verbose mode is enabled
+func logf(format string, args ...interface{}) {
+	if verboseMode {
+		fmt.Printf(format, args...)
+	}
+}
 
 type Error struct {
 	Message string
@@ -111,13 +167,46 @@ func (i Info) OptimizedWastedSpace() (int64, float64) {
 }
 
 func (i Info) calculateLayout(structType *types.Struct, sizes types.Sizes) []Field {
+	// Set up panic recovery to handle type system errors
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Recovered from panic in calculateLayout: %v\n", r)
+			// We'll return an empty layout rather than crashing
+		}
+	}()
+
 	var fields []Field
 	offset := int64(0)
 
 	for i := 0; i < structType.NumFields(); i++ {
 		field := structType.Field(i)
-		size := sizes.Sizeof(field.Type())
-		align := sizes.Alignof(field.Type())
+
+		// Check for nil type to avoid panic
+		if field.Type() == nil {
+			fmt.Printf("Warning: Nil type found for field %s\n", field.Name())
+			continue
+		}
+
+		// Safely calculate size and alignment with panic protection
+		size := int64(0)
+		align := int64(1) // Default minimum alignment
+
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("Warning: Failed to calculate size/alignment for field %s: %v\n",
+						field.Name(), r)
+				}
+			}()
+			size = sizes.Sizeof(field.Type())
+			align = sizes.Alignof(field.Type())
+		}()
+
+		// Skip fields with zero or negative size (indicates error in size calculation)
+		if size <= 0 {
+			fmt.Printf("Warning: Invalid size (%d) for field %s, skipping\n", size, field.Name())
+			continue
+		}
 
 		// add padding if needed
 		if rem := offset % align; rem != 0 {
@@ -148,10 +237,21 @@ func (i Info) calculateLayout(structType *types.Struct, sizes types.Sizes) []Fie
 	// adding final padding for struct alignment
 	structAlign := int64(1)
 	for i := 0; i < structType.NumFields(); i++ {
-		fieldAlign := sizes.Alignof(structType.Field(i).Type())
-		if fieldAlign > structAlign {
-			structAlign = fieldAlign
-		}
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					// Just use default alignment if calculation fails
+				}
+			}()
+
+			field := structType.Field(i)
+			if field.Type() != nil {
+				fieldAlign := sizes.Alignof(field.Type())
+				if fieldAlign > structAlign {
+					structAlign = fieldAlign
+				}
+			}
+		}()
 	}
 
 	if rem := offset % structAlign; rem != 0 {
@@ -284,10 +384,23 @@ func analyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, s
 
 func collectStructs(node *ast.File, info *types.Info, strategyNames []string) ([]Info, error) {
 	var result []Info
-
 	var processingErrors error
 
+	// Set up panic recovery for the whole function
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Recovered from panic in collectStructs: %v\n", r)
+		}
+	}()
+
 	ast.Inspect(node, func(n ast.Node) bool {
+		// Recover from panics in the inspection function
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("Recovered from panic in struct inspection: %v\n", r)
+			}
+		}()
+
 		typeSpec, ok := n.(*ast.TypeSpec)
 		if !ok {
 			return true // continue traversing
@@ -310,12 +423,22 @@ func collectStructs(node *ast.File, info *types.Info, strategyNames []string) ([
 			return true // not a struct type
 		}
 
-		structInfo, err := processStructWithStrategies(typeSpec.Name.Name, underlyingType, strategyNames)
-		if err != nil {
-			processingErrors = err
-			return false
-		}
-		result = append(result, structInfo)
+		// Process each struct with error handling
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("Recovered from panic processing struct %s: %v\n",
+						typeSpec.Name.Name, r)
+				}
+			}()
+
+			structInfo, err := processStructWithStrategies(typeSpec.Name.Name, underlyingType, strategyNames)
+			if err != nil {
+				processingErrors = err
+				return
+			}
+			result = append(result, structInfo)
+		}()
 
 		return true
 	})
@@ -341,19 +464,37 @@ func collectFieldOptmizers(strategyNames []string) ([]FieldOptimizer, error) {
 
 // process a struct and calculate its layout with specified optimizers
 func processStructWithStrategies(name string, structType *types.Struct, strategyNames []string) (Info, error) {
+	// Set up panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Recovered from panic in processStructWithStrategies for %s: %v\n", name, r)
+		}
+	}()
+
 	tempInfo := Info{
 		Name: name,
 	}
 
 	// calculate layout
 	fields := tempInfo.calculateLayout(structType, &customSizes)
+
+	// If we got no fields (possibly due to error recovery), return early
+	if len(fields) == 0 {
+		return Info{
+			Name: name,
+			Type: structType,
+		}, nil
+	}
+
 	optimizers, err := collectFieldOptmizers(strategyNames)
 	if err != nil {
 		return Info{}, err
 	}
+
 	optimizedFields, err := tempInfo.optimizeStructLayoutWithStrategies(structType, &customSizes, optimizers)
 	if err != nil {
-		return Info{}, err
+		// Just use original layout if optimization fails
+		optimizedFields = fields
 	}
 
 	originalSize := calculateTotalSize(fields)
@@ -409,38 +550,166 @@ func loadPackagesFromDirectory(dirPath string) ([]*packages.Package, error) {
 		Mode: packages.NeedTypes | packages.NeedTypesInfo | packages.NeedImports | packages.NeedSyntax,
 		Dir:  dirPath,
 	}
-	return packages.Load(config, "./...")
+
+	if timeout > 0 {
+		logf("Loading packages with %d second timeout...\n", timeout)
+		done := make(chan struct{})
+		var pkgs []*packages.Package
+		var loadErr error
+
+		go func() {
+			pkgs, loadErr = packages.Load(config, "./...")
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			logf("Loaded %d packages\n", len(pkgs))
+			return pkgs, loadErr
+		case <-time.After(time.Duration(timeout) * time.Second):
+			return nil, fmt.Errorf("package loading timed out after %d seconds", timeout)
+		}
+	} else {
+		logf("Loading packages (no timeout)...\n")
+		return packages.Load(config, "./...")
+	}
 }
 
 // AnalyseStructsAtDirectoryPath analyzes structs from a directory path with specified optimizers
 func AnalyseStructsAtDirectoryPath(directoryPath string, strategyNames []string) ([][]Info, error) {
+	// Set up panic recovery for the main function
+	defer func() {
+		if r := recover(); r != nil {
+			logf("Recovered from panic in AnalyseStructsAtDirectoryPath: %v\n", r)
+		}
+	}()
+
+	logf("Loading packages from %s...\n", directoryPath)
 	pkgs, err := loadPackagesFromDirectory(directoryPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load packages: %w", err)
+	}
+	fmt.Printf(">>> packages %d\n", len(pkgs))
+
+	// For very large codebases, limit the number of packages processed
+	if maxPackages > 0 && len(pkgs) > maxPackages {
+		fmt.Printf("Warning: Limiting analysis to %d packages out of %d total\n", maxPackages, len(pkgs))
+		pkgs = pkgs[:maxPackages]
 	}
 
 	var allInfos [][]Info
+	var allInfosMutex sync.Mutex // Protect concurrent access to allInfos
 
-	for _, pkg := range pkgs {
-		var packageInfos []Info
+	// Use a semaphore to limit concurrent goroutines based on the concurrency setting
+	semaphore := make(chan struct{}, concurrency)
 
-		if len(pkg.Errors) > 0 {
-			fmt.Printf("skipping package %s due to errors: %v\n", pkg.PkgPath, pkg.Errors)
-			continue
-		}
+	var wg sync.WaitGroup
+	wg.Add(len(pkgs))
 
-		for _, syntax := range pkg.Syntax {
-			fileInfos, err := collectStructs(syntax, pkg.TypesInfo, strategyNames)
-			if err != nil {
-				return nil, err
+	// Use an error channel to collect errors
+	errChan := make(chan error, len(pkgs))
+
+	logf("Processing packages with %d workers...\n", concurrency)
+	for i, pkg := range pkgs {
+		go func(i int, pkg *packages.Package) {
+			// Acquire semaphore slot
+			semaphore <- struct{}{}
+			defer func() {
+				// Release semaphore slot
+				<-semaphore
+				wg.Done()
+
+				// Handle panics in goroutine
+				if r := recover(); r != nil {
+					logf("Recovered from panic in package processing goroutine (%s): %v\n",
+						pkg.PkgPath, r)
+				}
+			}()
+
+			// Skip packages with errors if configured to do so
+			if len(pkg.Errors) > 0 {
+				if skipErrors {
+					logf("Skipping package %s due to errors\n", pkg.PkgPath)
+					return
+				} else {
+					errChan <- fmt.Errorf("error in package %s: %v", pkg.PkgPath, pkg.Errors[0])
+					return
+				}
 			}
-			packageInfos = append(packageInfos, fileInfos...)
+
+			// Skip packages with no syntax
+			if len(pkg.Syntax) == 0 {
+				return
+			}
+
+			var packageInfos []Info
+
+			// Process each file in the package
+			for _, syntax := range pkg.Syntax {
+				// Handle file processing errors gracefully
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							logf("Recovered from panic processing file in package %s: %v\n",
+								pkg.PkgPath, r)
+						}
+					}()
+
+					fileInfos, err := collectStructs(syntax, pkg.TypesInfo, strategyNames)
+					if err != nil {
+						if skipErrors {
+							logf("Error processing package %s: %v\n", pkg.PkgPath, err)
+							return
+						} else {
+							errChan <- fmt.Errorf("error processing package %s: %w", pkg.PkgPath, err)
+							return
+						}
+					}
+
+					// Only append if we found structs
+					if len(fileInfos) > 0 {
+						packageInfos = append(packageInfos, fileInfos...)
+					}
+				}()
+			}
+
+			// If we found any structs, add them to the results
+			if len(packageInfos) > 0 {
+				allInfosMutex.Lock()
+				allInfos = append(allInfos, packageInfos)
+				allInfosMutex.Unlock()
+
+				if verboseMode && i%10 == 0 {
+					logf("Processed %d/%d packages...\n", i+1, len(pkgs))
+				}
+			}
+		}(i, pkg)
+	}
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+	close(errChan)
+
+	// Check for errors if we're not skipping them
+	if !skipErrors {
+		select {
+		case err := <-errChan:
+			return nil, err
+		default:
+			// No errors
+		}
+	} else {
+		// Log errors but don't fail
+		var errList []string
+		for err := range errChan {
+			errList = append(errList, err.Error())
 		}
 
-		if len(packageInfos) > 0 {
-			allInfos = append(allInfos, packageInfos)
+		if len(errList) > 0 {
+			logf("Warning: Encountered %d errors during processing\n", len(errList))
 		}
 	}
 
+	logf("Analysis complete. Found structs in %d packages.\n", len(allInfos))
 	return allInfos, nil
 }

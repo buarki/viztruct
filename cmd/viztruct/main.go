@@ -336,79 +336,101 @@ func outputOverallSummary(allStructs []structi.Info) {
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, "Usage: %s [options]\n\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "Options:\n")
-	fmt.Fprintf(os.Stderr, "  --format string      Output format (json or txt) (default \"txt\")\n")
-	fmt.Fprintf(os.Stderr, "  --struct string      Inline struct definition\n")
-	fmt.Fprintf(os.Stderr, "  --file string        Path to file or directory containing struct definitions\n")
-	fmt.Fprintf(os.Stderr, "  --svg                Generate SVG visualization (default false)\n")
-	fmt.Fprintf(os.Stderr, "  --strategies string  Comma-separated list of optimization strategies to use\n")
-	fmt.Fprintf(os.Stderr, "                       Available strategies: %s (default: all)\n",
-		strings.Join(structi.GetAllOptimizerNames(), ", "))
-	fmt.Fprintf(os.Stderr, "  --version            Show version information\n")
-	fmt.Fprintf(os.Stderr, "  --help               Show help message\n")
-	fmt.Fprintf(os.Stderr, "\nExamples:\n")
-	fmt.Fprintf(os.Stderr, "  %s --struct 'type MyStruct struct { a int; b string }'\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s --file structs.go\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s --file /path/to/project/dir\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s --strategies=\"greedy,group\" --file structs.go\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s --format json --struct 'type MyStruct struct { a int; b string }'\n", os.Args[0])
-	fmt.Fprintf(os.Stderr, "  %s --svg --struct 'type MyStruct struct { a int; b string }'\n", os.Args[0])
+	fmt.Println("Usage: ./viztruct [options]")
+	fmt.Println()
+	fmt.Println("Options:")
+	fmt.Println("  --format string      Output format (json or txt) (default \"txt\")")
+	fmt.Println("  --struct string      Inline struct definition")
+	fmt.Println("  --file string        Path to file or directory containing struct definitions")
+	fmt.Println("  --svg                Generate SVG visualization (default false)")
+	fmt.Println("  --strategies string  Comma-separated list of optimization strategies to use")
+	fmt.Println("                       Available strategies: alignment, size, group, greedy (default: all)")
+	fmt.Println("  --concurrency int    Number of concurrent workers for analysis (0 for sequential)")
+	fmt.Println("                       (default: use all available CPU cores)")
+	fmt.Println("  --max-packages int   Maximum number of packages to analyze (0 for unlimited)")
+	fmt.Println("                       (default: 500)")
+	fmt.Println("  --skip-errors        Skip packages with errors instead of failing (default true)")
+	fmt.Println("  --verbose            Enable verbose output with detailed warnings (default false)")
+	fmt.Println("  --timeout int        Timeout in seconds for package loading (0 for no timeout)")
+	fmt.Println("                       (default: 300)")
+	fmt.Println("  --version            Show version information")
+	fmt.Println("  --help               Show help message")
+	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("  ./viztruct --struct 'type MyStruct struct { a int; b string }'")
+	fmt.Println("  ./viztruct --file structs.go")
+	fmt.Println("  ./viztruct --file /path/to/project/dir")
+	fmt.Println("  ./viztruct --strategies=\"greedy,group\" --file structs.go")
+	fmt.Println("  ./viztruct --concurrency=4 --file /path/to/large/project")
+	fmt.Println("  ./viztruct --format json --struct 'type MyStruct struct { a int; b string }'")
+	fmt.Println("  ./viztruct --svg --struct 'type MyStruct struct { a int; b string }'")
+	fmt.Println("  ./viztruct --max-packages=100 --timeout=60 --verbose --file /path/to/huge/project")
 }
 
 func main() {
-	formatFlag := flag.String("format", "txt", "Output format (json or txt)")
-	structDef := flag.String("struct", "", "Struct definition to visualize")
-	fileFlag := flag.String("file", "", "Path to file or directory containing struct definitions")
-	helpFlag := flag.Bool("help", false, "Show help message")
-	svgFlag := flag.Bool("svg", false, "Generate SVG visualization")
-	version := flag.Bool("version", false, "Show version information")
-	strategiesFlag := flag.String("strategies", "", "Comma-separated list of optimization strategies to use")
+	structArg := flag.String("struct", "", "Inline struct definition")
+	fileArg := flag.String("file", "", "Path to file or directory containing struct definitions")
+	formatArg := flag.String("format", string(FormatText), "Output format (json or txt)")
+	svgArg := flag.Bool("svg", false, "Generate SVG visualization")
+	versionArg := flag.Bool("version", false, "Show version information")
+	helpArg := flag.Bool("help", false, "Show help message")
+	strategiesArg := flag.String("strategies", "", "Comma-separated list of optimization strategies to use")
+	concurrencyArg := flag.Int("concurrency", 0, "Number of concurrent workers for analysis (0 for sequential)")
+
+	// Add new options for large codebases
+	maxPackagesArg := flag.Int("max-packages", 1500, "Maximum number of packages to analyze (0 for unlimited)")
+	skipErrorsArg := flag.Bool("skip-errors", true, "Skip packages with errors instead of failing")
+	verboseArg := flag.Bool("verbose", false, "Enable verbose output with detailed warnings")
+	timeoutArg := flag.Int("timeout", 300, "Timeout in seconds for package loading (0 for no timeout)")
 
 	flag.Parse()
 
-	if *version {
-		fmt.Printf("viztruct version %s\n", binVersion)
-		os.Exit(0)
+	if *helpArg {
+		printUsage()
+		return
 	}
 
-	if *helpFlag || len(os.Args) == 1 {
+	if *versionArg {
+		fmt.Printf("viztruct version %s\n", binVersion)
+		return
+	}
+
+	format := OutputFormat(*formatArg)
+	if format != FormatText && format != FormatJSON {
+		fmt.Fprintf(os.Stderr, "error: invalid format: %s\n", *formatArg)
 		printUsage()
 		os.Exit(1)
 	}
 
-	format := OutputFormat(*formatFlag)
-	if format != FormatJSON && format != FormatText {
-		fmt.Fprintf(os.Stderr, "invalid format: %s. use 'json' or 'txt'\n", format)
-		os.Exit(1)
-	}
-
+	// Handle strategy names
 	var strategyNames []string
-	if *strategiesFlag != "" {
-		strategyNames = strings.Split(*strategiesFlag, ",")
-		for i := range strategyNames {
-			strategyNames[i] = strings.TrimSpace(strategyNames[i])
-		}
-
-		allNames := structi.GetAllOptimizerNames()
-		allNamesMap := make(map[string]bool)
-		for _, name := range allNames {
-			allNamesMap[name] = true
-		}
-
-		for _, name := range strategyNames {
-			if !allNamesMap[name] {
-				fmt.Fprintf(os.Stderr, "error: unknown strategy '%s'\nAvailable strategies: %s\n",
-					name, strings.Join(allNames, ", "))
-				os.Exit(1)
-			}
+	if *strategiesArg != "" {
+		strategyNames = strings.Split(*strategiesArg, ",")
+		for i, name := range strategyNames {
+			strategyNames[i] = strings.TrimSpace(name)
 		}
 	}
 
-	if *fileFlag != "" {
-		analyzeFromPath(*fileFlag, format, *svgFlag, strategyNames)
-	} else if *structDef != "" {
-		analyzeInlineStructs(*structDef, format, *svgFlag, strategyNames)
+	// Configure global options based on flags
+	if *maxPackagesArg > 0 {
+		structi.SetMaxPackages(*maxPackagesArg)
+	}
+
+	structi.SetVerboseMode(*verboseArg)
+	structi.SetSkipErrors(*skipErrorsArg)
+
+	if *timeoutArg > 0 {
+		structi.SetTimeout(*timeoutArg)
+	}
+
+	if *concurrencyArg > 0 {
+		structi.SetConcurrency(*concurrencyArg)
+	}
+
+	if *structArg != "" {
+		analyzeInlineStructs(*structArg, format, *svgArg, strategyNames)
+	} else if *fileArg != "" {
+		analyzeFromPath(*fileArg, format, *svgArg, strategyNames)
 	} else {
 		fmt.Fprintf(os.Stderr, "error: no struct definition provided\n")
 		printUsage()
