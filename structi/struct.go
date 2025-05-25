@@ -15,6 +15,20 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
+// ExecutionMode defines how packages are processed
+type ExecutionMode int
+
+const (
+	// Sequential processes packages one by one (single thread)
+	Sequential ExecutionMode = iota
+
+	// Concurrent processes packages in parallel (multiple threads)
+	Concurrent
+
+	// DependencyAware processes packages in parallel, but respects dependencies
+	DependencyAware
+)
+
 // Configuration variables
 var (
 	maxPackages = 1500             // Maximum number of packages to analyze
@@ -22,7 +36,23 @@ var (
 	skipErrors  = true             // Whether to skip packages with errors
 	timeout     = 300              // Timeout in seconds for package loading
 	concurrency = runtime.NumCPU() // Number of concurrent workers
+	execMode    = Concurrent       // Default execution mode
 )
+
+// SetExecutionMode sets the execution mode (Sequential or Concurrent)
+func SetExecutionMode(mode ExecutionMode) {
+	execMode = mode
+	if mode == Sequential {
+		concurrency = 1 // Force single worker for sequential mode
+	} else {
+		concurrency = 2 // runtime.NumCPU() // Reset to default for concurrent mode
+	}
+}
+
+// GetExecutionMode returns the current execution mode
+func GetExecutionMode() ExecutionMode {
+	return execMode
+}
 
 // SetMaxPackages sets the maximum number of packages to analyze
 func SetMaxPackages(max int) {
@@ -597,36 +627,103 @@ func AnalyseStructsAtDirectoryPath(directoryPath string, strategyNames []string)
 		pkgs = pkgs[:maxPackages]
 	}
 
-	var allInfos [][]Info
-	var allInfosMutex sync.Mutex // Protect concurrent access to allInfos
+	// Execute based on execution mode
+	switch execMode {
+	case Sequential:
+		return processPackagesSequentially(pkgs, strategyNames)
+	case Concurrent:
+		return processPackagesConcurrently(pkgs, strategyNames)
+	case DependencyAware:
+		return processPackagesWithDependencies(pkgs, strategyNames)
+	default:
+		// Default to concurrent mode
+		return processPackagesConcurrently(pkgs, strategyNames)
+	}
+}
 
-	// Use a semaphore to limit concurrent goroutines based on the concurrency setting
+// sequential mode
+func processPackagesSequentially(pkgs []*packages.Package, strategyNames []string) ([][]Info, error) {
+	var allInfos [][]Info
+
+	fmt.Printf("Processing packages sequentially...\n")
+
+	for i, pkg := range pkgs {
+		// skip packages with errors if configured to do so
+		if len(pkg.Errors) > 0 {
+			if skipErrors {
+				logf("Skipping package %s due to errors\n", pkg.PkgPath)
+				continue
+			} else {
+				return nil, fmt.Errorf("error in package %s: %v", pkg.PkgPath, pkg.Errors[0])
+			}
+		}
+
+		// skip packages with no syntax
+		if len(pkg.Syntax) == 0 {
+			continue
+		}
+
+		var packageInfos []Info
+
+		// process each file in the package
+		for _, syntax := range pkg.Syntax {
+			fileInfos, err := collectStructs(syntax, pkg.TypesInfo, strategyNames)
+			if err != nil {
+				if skipErrors {
+					logf("Error processing file in package %s: %v\n", pkg.PkgPath, err)
+					continue
+				} else {
+					return nil, fmt.Errorf("error processing package %s: %w", pkg.PkgPath, err)
+				}
+			}
+
+			packageInfos = append(packageInfos, fileInfos...)
+		}
+
+		// if we found any structs, add them to the results
+		if len(packageInfos) > 0 {
+			allInfos = append(allInfos, packageInfos)
+
+			if verboseMode && i%10 == 0 {
+				logf("Processed %d/%d packages...\n", i+1, len(pkgs))
+			}
+		}
+	}
+
+	logf("Analysis complete. Found structs in %d packages.\n", len(allInfos))
+	return allInfos, nil
+}
+
+// parallel mode
+func processPackagesConcurrently(pkgs []*packages.Package, strategyNames []string) ([][]Info, error) {
+	var allInfos [][]Info
+	var allInfosMutex sync.Mutex // protect concurrent access to allInfos
+
+	// semaphore to limit concurrent goroutines based on the concurrency setting
 	semaphore := make(chan struct{}, concurrency)
 
 	var wg sync.WaitGroup
 	wg.Add(len(pkgs))
 
-	// Use an error channel to collect errors
 	errChan := make(chan error, len(pkgs))
 
-	logf("Processing packages with %d workers...\n", concurrency)
+	logf("Processing packages concurrently with %d workers...\n", concurrency)
 	for i, pkg := range pkgs {
 		go func(i int, pkg *packages.Package) {
-			// Acquire semaphore slot
+			// cquire semaphore slot
 			semaphore <- struct{}{}
 			defer func() {
-				// Release semaphore slot
+				// release semaphore slot
 				<-semaphore
 				wg.Done()
 
-				// Handle panics in goroutine
 				if r := recover(); r != nil {
 					logf("Recovered from panic in package processing goroutine (%s): %v\n",
 						pkg.PkgPath, r)
 				}
 			}()
 
-			// Skip packages with errors if configured to do so
+			// skip packages with errors if configured to do so
 			if len(pkg.Errors) > 0 {
 				if skipErrors {
 					logf("Skipping package %s due to errors\n", pkg.PkgPath)
@@ -637,16 +734,16 @@ func AnalyseStructsAtDirectoryPath(directoryPath string, strategyNames []string)
 				}
 			}
 
-			// Skip packages with no syntax
+			// skip packages with no syntax
 			if len(pkg.Syntax) == 0 {
 				return
 			}
 
 			var packageInfos []Info
 
-			// Process each file in the package
+			// process each file in the package
 			for _, syntax := range pkg.Syntax {
-				// Handle file processing errors gracefully
+				// handle file processing errors gracefully
 				func() {
 					defer func() {
 						if r := recover(); r != nil {
@@ -666,14 +763,14 @@ func AnalyseStructsAtDirectoryPath(directoryPath string, strategyNames []string)
 						}
 					}
 
-					// Only append if we found structs
+					// only append if we found structs
 					if len(fileInfos) > 0 {
 						packageInfos = append(packageInfos, fileInfos...)
 					}
 				}()
 			}
 
-			// If we found any structs, add them to the results
+			// if we found any structs, add them to the results
 			if len(packageInfos) > 0 {
 				allInfosMutex.Lock()
 				allInfos = append(allInfos, packageInfos)
@@ -686,20 +783,20 @@ func AnalyseStructsAtDirectoryPath(directoryPath string, strategyNames []string)
 		}(i, pkg)
 	}
 
-	// Wait for all goroutines to finish
+	// wait for all goroutines to finish
 	wg.Wait()
 	close(errChan)
 
-	// Check for errors if we're not skipping them
+	// check for errors if we're not skipping them
 	if !skipErrors {
 		select {
 		case err := <-errChan:
 			return nil, err
 		default:
-			// No errors
+			// no errors
 		}
 	} else {
-		// Log errors but don't fail
+		// log errors but don't fail
 		var errList []string
 		for err := range errChan {
 			errList = append(errList, err.Error())

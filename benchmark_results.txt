@@ -1,0 +1,25 @@
+=================================
+VIZTRUCT PERFORMANCE BENCHMARK
+=================================
+
+Test repository: /Users/buarki/projects/kubernetes
+Runs per mode: 3
+
+Sequential mode times:
+Run 1: 4.503362000 seconds
+Run 2: 4.396354000 seconds
+Run 3: 4.067729000 seconds
+Average sequential time: 4.322 seconds
+
+Concurrent mode times:
+Run 1: 3.848320000 seconds
+Run 2: 3.988668000 seconds
+Run 3: 3.882246000 seconds
+Average concurrent time: 3.906 seconds
+
+=================================
+RESULTS SUMMARY
+=================================
+Average sequential time: 4.322 seconds
+Average concurrent time: 3.906 seconds
+Speedup: 1.10x

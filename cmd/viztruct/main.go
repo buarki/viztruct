@@ -353,6 +353,8 @@ func printUsage() {
 	fmt.Println("  --verbose            Enable verbose output with detailed warnings (default false)")
 	fmt.Println("  --timeout int        Timeout in seconds for package loading (0 for no timeout)")
 	fmt.Println("                       (default: 300)")
+	fmt.Println("  --mode string        Execution mode: 'sequential', 'concurrent', or 'dependency' (default: concurrent)")
+	fmt.Println("                       Use this for benchmarking performance between different execution modes")
 	fmt.Println("  --version            Show version information")
 	fmt.Println("  --help               Show help message")
 	fmt.Println()
@@ -365,6 +367,8 @@ func printUsage() {
 	fmt.Println("  ./viztruct --format json --struct 'type MyStruct struct { a int; b string }'")
 	fmt.Println("  ./viztruct --svg --struct 'type MyStruct struct { a int; b string }'")
 	fmt.Println("  ./viztruct --max-packages=100 --timeout=60 --verbose --file /path/to/huge/project")
+	fmt.Println("  ./viztruct --mode=sequential --file /path/to/project/dir")
+	fmt.Println("  ./viztruct --mode=dependency --file /path/to/project/dir")
 }
 
 func main() {
@@ -378,10 +382,13 @@ func main() {
 	concurrencyArg := flag.Int("concurrency", 0, "Number of concurrent workers for analysis (0 for sequential)")
 
 	// Add new options for large codebases
-	maxPackagesArg := flag.Int("max-packages", 1500, "Maximum number of packages to analyze (0 for unlimited)")
+	maxPackagesArg := flag.Int("max-packages", 500, "Maximum number of packages to analyze (0 for unlimited)")
 	skipErrorsArg := flag.Bool("skip-errors", true, "Skip packages with errors instead of failing")
 	verboseArg := flag.Bool("verbose", false, "Enable verbose output with detailed warnings")
 	timeoutArg := flag.Int("timeout", 300, "Timeout in seconds for package loading (0 for no timeout)")
+
+	// Add execution mode option for benchmarking
+	modeArg := flag.String("mode", "concurrent", "Execution mode: 'sequential', 'concurrent', or 'dependency'")
 
 	flag.Parse()
 
@@ -425,6 +432,20 @@ func main() {
 
 	if *concurrencyArg > 0 {
 		structi.SetConcurrency(*concurrencyArg)
+	}
+
+	// Set execution mode
+	mode := strings.ToLower(*modeArg)
+	switch mode {
+	case "sequential":
+		structi.SetExecutionMode(structi.Sequential)
+		fmt.Println("Running in sequential mode")
+	case "dependency", "dependency-aware", "dependencies":
+		structi.SetExecutionMode(structi.DependencyAware)
+		fmt.Println("Running in dependency-aware mode")
+	default: // includes "concurrent"
+		structi.SetExecutionMode(structi.Concurrent)
+		fmt.Println("Running in concurrent mode")
 	}
 
 	if *structArg != "" {
