@@ -4,3 +4,5 @@
 /viztruct
 .vscode
 .stopped
+/ci-plugin
+/viztruct-ci

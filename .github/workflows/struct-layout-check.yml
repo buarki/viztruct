@@ -1,0 +1,35 @@
+name: Struct Layout Check
+
+on:
+  pull_request:
+    branches: [ '**' ]
+
+jobs:
+  check-struct-layout:
+    name: Check Go Struct Layouts
+    runs-on: ubuntu-latest
+    container:
+      image: buarki/viztruct-plugin:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 10 
+      
+      - name: Set up Git for comparison
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git config --global --add safe.directory /__w/viztruct/viztruct
+      
+      - name: Get PR base commit
+        id: get-base
+        run: echo "base_sha=$(git merge-base ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})" >> $GITHUB_OUTPUT
+
+      - name: Run Struct Layout Check
+        id: struct-check
+        run: |
+          /app/ci-plugin \
+            --repo .
+      
+      
