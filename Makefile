@@ -3,6 +3,8 @@ WASM_BINARY_NAME=main.wasm
 OUTPUT_DIR=static
 WASM_DIR=cmd/server
 CLI_DIR=cmd/viztruct
+PLUGIN_DIR=cmd/ci-plugin
+PLUGIN_NAME=ci-plugin
 GO_INSTALL_PATH=$(shell which go)
 WASM_EXEC_PATH=$(GO_INSTALL_PATH)/lib/wasm/wasm_exec.js
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -16,7 +18,10 @@ build-wasm:
 build-cli:
 	go build -ldflags "$(LDFLAGS)" -o $(CLI_NAME) ./$(CLI_DIR)
 
-build: build-wasm build-cli
+build-plugin:
+	go build -ldflags "$(LDFLAGS)" -o $(PLUGIN_NAME) ./$(PLUGIN_DIR)
+
+build: build-wasm build-cli build-plugin
 
 clean:
 	go clean
