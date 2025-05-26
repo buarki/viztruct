@@ -36,13 +36,13 @@ type Customer struct {
 
 // BadlyOrdered is a struct with fields not ordered optimally for memory layout
 type BadlyOrdered struct {
-	A bool       // 1 byte
-	B int64      // 8 bytes
-	C byte       // 1 byte
-	D int32      // 4 bytes
-	E bool       // 1 byte
-	F complex128 // 16 bytes
-	G byte       // 1 byte
+	IsApproved bool       // 1 byte
+	Balance    int64      // 8 bytes
+	SHA        byte       // 1 byte
+	ID         int32      // 4 bytes
+	Confirmed  bool       // 1 byte
+	Complex    complex128 // 16 bytes
+	Eight      byte       // 1 byte
 }
 
 // OptimallyOrdered is the same struct with fields ordered to minimize padding
