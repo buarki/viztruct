@@ -341,7 +341,7 @@ func printUsage() {
 	fmt.Println("Options:")
 	fmt.Println("  --format string      Output format (json or txt) (default \"txt\")")
 	fmt.Println("  --struct string      Inline struct definition")
-	fmt.Println("  --file string        Path to file or directory containing struct definitions")
+	fmt.Println("  --path string        Path to file or directory containing struct definitions")
 	fmt.Println("  --svg                Generate SVG visualization (default false)")
 	fmt.Println("  --strategies string  Comma-separated list of optimization strategies to use")
 	fmt.Println("                       Available strategies: alignment, size, group, greedy (default: all)")
@@ -356,17 +356,17 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  ./viztruct --struct 'type MyStruct struct { a int; b string }'")
-	fmt.Println("  ./viztruct --file structs.go")
-	fmt.Println("  ./viztruct --file /path/to/project/dir")
-	fmt.Println("  ./viztruct --strategies=\"greedy,group\" --file structs.go")
+	fmt.Println("  ./viztruct --path structs.go")
+	fmt.Println("  ./viztruct --path /path/to/project/dir")
+	fmt.Println("  ./viztruct --strategies=\"greedy,group\" --path structs.go")
 	fmt.Println("  ./viztruct --format json --struct 'type MyStruct struct { a int; b string }'")
 	fmt.Println("  ./viztruct --svg --struct 'type MyStruct struct { a int; b string }'")
-	fmt.Println("  ./viztruct --max-packages=100 --timeout=60 --verbose --file /path/to/huge/project")
+	fmt.Println("  ./viztruct --max-packages=100 --timeout=60 --verbose --path /path/to/huge/project")
 }
 
 func main() {
 	structArg := flag.String("struct", "", "Inline struct definition")
-	fileArg := flag.String("file", "", "Path to file or directory containing struct definitions")
+	directoryPathArg := flag.String("path", "", "Path to directory containing struct definitions")
 	formatArg := flag.String("format", string(FormatText), "Output format (json or txt)")
 	svgArg := flag.Bool("svg", false, "Generate SVG visualization")
 	versionArg := flag.Bool("version", false, "Show version information")
@@ -417,8 +417,8 @@ func main() {
 
 	if *structArg != "" {
 		analyzeInlineStructs(*structArg, format, *svgArg, strategyNames)
-	} else if *fileArg != "" {
-		analyzeFromPath(*fileArg, format, *svgArg, strategyNames)
+	} else if *directoryPathArg != "" {
+		analyzeFromPath(*directoryPathArg, format, *svgArg, strategyNames)
 	} else {
 		fmt.Fprintf(os.Stderr, "error: no struct definition provided\n")
 		printUsage()
