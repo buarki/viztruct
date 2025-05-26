@@ -58,7 +58,7 @@ viztruct --struct 'type MyStruct struct { A int8; B int32 }'
 ### Analyze structs from a file
 
 ```sh
-viztruct --file ./internal/samples/dumb_service.go --format=txt
+viztruct --path ./internal/samples/dumb_service.go --format=txt
 ```
 
 ### Get JSON output
@@ -73,7 +73,7 @@ viztruct --svg --struct 'type MyStruct struct { A int8; B int32 }'
 
 ### Analyze and define the optimization strategy
 ```sh
-viztruct --file ./internal/samples/dumb_service.go --format=txt --strategies=alignment,size,group,greedy
+viztruct --path ./internal/samples/dumb_service.go --format=txt --strategies=alignment,size,group,greedy
 ```
 
 ### Show help
