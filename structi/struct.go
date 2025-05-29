@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
 	"strings"
 	"time"
 
@@ -558,7 +559,15 @@ func loadPackagesFromDirectory(dirPath string) ([]*packages.Package, error) {
 
 // AnalyseStructsAtDirectoryPath analyzes structs from a directory path with specified optimizers
 func AnalyseStructsAtDirectoryPath(directoryPath string, strategyNames []string) ([][]Info, error) {
-	// set up panic recovery for the main function
+	s, err := os.Stat(directoryPath)
+	if os.IsNotExist(err) {
+		return nil, fmt.Errorf("error: directory %s does not exist", directoryPath)
+	}
+
+	if !s.IsDir() {
+		return nil, fmt.Errorf("error: %s is not a directory", directoryPath)
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
 			logf("recovered from panic in AnalyseStructsAtDirectoryPath: %v\n", r)

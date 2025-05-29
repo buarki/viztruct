@@ -41,9 +41,9 @@ func init() {
 	}
 }
 
-// analyzeFromPath handles analysis of structs from a file or directory path
-func analyzeFromPath(filePath string, format OutputFormat, generateSVG bool, strategyNames []string) {
-	structGroups, err := structi.AnalyseStructsAtDirectoryPath(filePath, strategyNames)
+// analyzeFromPath handles analysis of structs from a directory path
+func analyzeFromPath(directoryPath string, format OutputFormat, generateSVG bool, strategyNames []string) {
+	structGroups, err := structi.AnalyseStructsAtDirectoryPath(directoryPath, strategyNames)
 	if err != nil {
 		if errI, ok := err.(*structi.Error); ok {
 			fmt.Fprintf(os.Stderr, "%v\n", errI.Error())
@@ -326,7 +326,7 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("Options:")
 	fmt.Println("  --format string               Output format (json or txt) (default \"txt\")")
-	fmt.Println("  --path string                 Path to file or directory containing struct definitions")
+	fmt.Println("  --path string                 Path to directory containing struct definitions")
 	fmt.Println("  --svg                         Generate SVG visualization (default false). Each found struct will be saved as a separate file.")
 	fmt.Println("  --strategies string           Comma-separated list of optimization strategies to use")
 	fmt.Println("                                Available strategies: alignment, size, group, greedy (default: all)")
