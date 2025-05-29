@@ -3,6 +3,12 @@
 
 # viztruct
 
+## Table of Contents
+- [CLI installation](#cli-installation)
+- [Usage](#usage)
+- [Minimalist webapp](#website)
+- [CI/CD plugin](./cmd/ci-plugin/README.md)
+
 
 ![Image](./docs/demo.gif)
 SVG visualization:
@@ -49,13 +55,8 @@ sudo mv viztruct /usr/local/bin/
 ```
 
 ## Usage:
-### Analyze a struct from command line
 
-```sh
-viztruct --struct 'type MyStruct struct { A int8; B int32 }'
-```
-
-### Analyze structs from a file
+### Analyze structs from a path
 
 ```sh
 viztruct --path ./internal/samples/dumb_service.go --format=txt
@@ -63,12 +64,12 @@ viztruct --path ./internal/samples/dumb_service.go --format=txt
 
 ### Get JSON output
 ```sh
-viztruct --format json --struct 'type MyStruct struct { A int8; B int32 }'
+viztruct --path ./internal/samples/dumb_service.go --format=json
 ```
 
 ### Generate SVG visualization
 ```sh
-viztruct --svg --struct 'type MyStruct struct { A int8; B int32 }'
+viztruct --path ./internal/samples/dumb_service.go --format=json --svg
 ```
 
 ### Analyze and define the optimization strategy
@@ -83,9 +84,6 @@ viztruct --help
 
 The tool will print the struct layout analysis to stdout. Use the `--svg` flag to generate an SVG visualization.
 
-## Website
+## Minimalist webapp
 
-If you want to use from browser just visit the [deployed webapp](https://viztruct.vercel.app). You can paste/type your struct in the text input area and get a full padding analysis.
-
-## Limitations
-For now it is not able to handle directory paths as input. It's in the pipeline.
+If you want to use a limited version of viztruct (since it supports only explicitly defined types) in your browser just visit the [deployed webapp](https://viztruct.vercel.app). You can paste/type your struct in the text input area and get a full padding analysis.

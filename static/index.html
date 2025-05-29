@@ -84,7 +84,7 @@
         }
         .input-section, .optimized-section {
             flex: 1;
-            min-width: 0; /* Prevents flex items from overflowing */
+            min-width: 0;
         }
         .CodeMirror {
             height: 250px;
@@ -117,6 +117,11 @@
             margin: 10px 0;
             font-family: 'Courier New', Courier, monospace;
             font-size: 14px;
+            background-color: #fff8f8;
+            padding: 10px;
+            border-left: 3px solid #d32f2f;
+            white-space: pre-wrap;
+            display: none;
         }
         #svgOutput {
             margin-top: 20px;
@@ -124,9 +129,8 @@
             padding: 10px;
             position: relative;
             overflow: auto;
-            max-height: none; /* Ensure no height restriction */
+            max-height: none;
         }
-        /* Make sure SVGs can expand to their full height */
         #svgOutput svg {
             height: auto !important;
             width: 100%;
@@ -218,7 +222,6 @@
             }
         }
         
-        /* Tablet breakpoint */
         @media (min-width: 769px) and (max-width: 1024px) {
             .container {
                 gap: 15px;
@@ -229,6 +232,21 @@
             h1 {
                 font-size: 1.6rem;
             }
+        }
+        .disclaimer {
+            background-color: #f8f9fa;
+            border-left: 4px solid #6c757d;
+            padding: 10px 15px;
+            margin-bottom: 20px;
+            color: #495057;
+            font-size: 0.9rem;
+        }
+        .disclaimer a {
+            color: #0366d6;
+            text-decoration: none;
+        }
+        .disclaimer a:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
@@ -245,6 +263,10 @@
 
     <main class="main-content">
         <h1>Go Struct Memory Layout Visualizer</h1>
+        
+        <div class="disclaimer">
+            <strong>Note:</strong> This web visualizer is a limited version of viztruct that support only explicitly defined types. For full functionality, including handling of external types and packages, please use the <a href="https://github.com/buarki/viztruct?tab=readme-ov-file#cli-installation" target="_blank">CLI version</a>.
+        </div>
         
         <div class="examples">
             <button class="example-button" onclick="loadExample('simple')">Simple Example</button>
@@ -278,7 +300,6 @@
         </div>
         
         <div id="memorySavings" style="display: none;">
-            <!-- This div will be populated with savings banners -->
         </div>
         
         <div id="svgOutput"></div>
@@ -289,12 +310,10 @@
     </footer>
 
     <script>
-        // Set current year in footer
         document.getElementById('current-year').textContent = new Date().getFullYear();
         
         let inputEditor, outputEditor;
         
-        // example struct definitions
         const examples = {
             simple: `type User struct {
     ID        uint64
@@ -303,10 +322,17 @@
     Confirmed bool
 }`,
             bad: `type BadLayout struct {
-    Active    bool
-    ID        uint64
-    Confirmed bool
-    Age       uint32
+    Active       bool      // 1 byte + 7 bytes padding
+    ID           uint64    // 8 bytes
+    Name         string    // 16 bytes (pointer + length)
+    IsConfirmed  bool      // 1 byte + 7 bytes padding
+    Score        float64   // 8 bytes
+    Tiny         byte      // 1 byte + 7 bytes padding
+    Address      string    // 16 bytes (pointer + length)
+    IsEnabled    bool      // 1 byte + 7 bytes padding
+    Counter      uint32    // 4 bytes + 4 bytes padding
+    TinyValue    byte      // 1 byte + 7 bytes padding
+    Status       uint16    // 2 bytes + 6 bytes padding
 }`,
             nested: `type Point struct {
     X float64
@@ -471,16 +497,32 @@ type Rectangle struct {
                 const result = window.generateStructLayoutSVG(structInput);
                 
                 if (result.error) {
-                    document.getElementById('errorOutput').textContent = result.error;
+                    let errorMessage = result.error;
+                    
+                    if (errorMessage.includes("undefined:") || errorMessage.includes("package is undefined")) {
+                        errorMessage = "⚠️ External Type Error ⚠️\n\n" + 
+                            "This web visualizer cannot process external types that aren't defined in your input.\n\n" +
+                            "For types like 'time.Time' or other imported packages, you have two options:\n" +
+                            "1. Define the struct inline with your input\n" +
+                            "2. Use the CLI version which supports external types\n\n" +
+                            "Original error: " + errorMessage;
+                    }
+                    
+                    const errorOutput = document.getElementById('errorOutput');
+                    errorOutput.textContent = errorMessage;
+                    errorOutput.style.display = 'block';
                     document.getElementById('svgOutput').innerHTML = '';
                     if (outputEditor) {
-                        outputEditor.setValue('// Error: Invalid struct definition');
+                        outputEditor.setValue('// Error: Unable to visualize struct');
                         outputEditor.refresh();
                     } else {
-                        document.getElementById('optimizedOutput').value = '// Error: Invalid struct definition';
+                        document.getElementById('optimizedOutput').value = '// Error: Unable to visualize struct';
                     }
                     return;
                 }
+                
+                document.getElementById('errorOutput').style.display = 'none';
+                document.getElementById('errorOutput').textContent = '';
                 
                 let svgString = new TextDecoder().decode(result.svg);
                 const optimizedCode = new TextDecoder().decode(result.optimizedCode);
@@ -497,7 +539,6 @@ type Rectangle struct {
                     svgString = injectMemorySavingsIntoSVG(svgString, result.byteSavings);
                 }
                 
-                document.getElementById('errorOutput').textContent = '';
                 document.getElementById('svgOutput').innerHTML = svgString;
                 
             } catch (err) {
