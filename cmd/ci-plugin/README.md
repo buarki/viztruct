@@ -2,19 +2,19 @@
 
 ## How It Works
 
-- It collects the changed files between two commits;
-- Then, it perform an analisy at these changed files;
-- The output is a summary of the struct layout analyse;
+- It collects the changed files between two commits
+- Then, it performs an analysis on these changed files
+- The output is a summary of the struct layout analysis
 
-Ex: a simple usage:
+A simple usage example:
 
 ```sh
 docker run --rm -v $(pwd):/repo ci-plugin --repo .  --verbose
 ```
 
-Above example it consider current commit (HEAD) as the `target` commit and will use previous commit as the `origin`;
+The above example considers the current commit (HEAD) as the `target` commit and will use the previous commit as the `origin`.
 
-You can also manualy set the `to` and `from`:
+You can also manually set the `to` and `from`:
 ```sh
 docker run --rm -v $(pwd):/repo ci-plugin --repo .  --verbose --from=SOME_COMMIT_HERE --to=ANOTHER_COMMIT_HERE
 ```

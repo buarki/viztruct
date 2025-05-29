@@ -570,7 +570,6 @@ func AnalyseStructsAtDirectoryPath(directoryPath string, strategyNames []string)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load packages: %w", err)
 	}
-	fmt.Printf(">>> packages %d\n", len(pkgs))
 
 	if maxPackages > 0 && len(pkgs) > maxPackages {
 		fmt.Printf("Warning: Limiting analysis to %d packages out of %d total\n", maxPackages, len(pkgs))
@@ -583,8 +582,6 @@ func AnalyseStructsAtDirectoryPath(directoryPath string, strategyNames []string)
 // process packages one by one (sequential mode)
 func processPackagesSequentially(pkgs []*packages.Package, strategyNames []string) ([][]Info, error) {
 	var allInfos [][]Info
-
-	fmt.Printf("processing packages sequentially...\n")
 
 	for i, pkg := range pkgs {
 		// skip packages with errors if configured to do so

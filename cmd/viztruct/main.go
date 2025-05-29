@@ -41,20 +41,6 @@ func init() {
 	}
 }
 
-func analyzeInlineStructs(input string, format OutputFormat, generateSVG bool, strategyNames []string) {
-	structs, err := structi.AnalyseStructsAsStringWithStrategies(input, strategyNames)
-	if err != nil {
-		if errI, ok := err.(*structi.Error); ok {
-			fmt.Fprintf(os.Stderr, "%v\n", errI.Error())
-		} else {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
-		}
-		os.Exit(1)
-	}
-
-	processResults([][]structi.Info{structs}, format, generateSVG)
-}
-
 // analyzeFromPath handles analysis of structs from a file or directory path
 func analyzeFromPath(filePath string, format OutputFormat, generateSVG bool, strategyNames []string) {
 	structGroups, err := structi.AnalyseStructsAtDirectoryPath(filePath, strategyNames)
@@ -336,39 +322,36 @@ func outputOverallSummary(allStructs []structi.Info) {
 }
 
 func printUsage() {
-	fmt.Println("Usage: ./viztruct [options]")
+	fmt.Println("Usage: viztruct [options]")
 	fmt.Println()
 	fmt.Println("Options:")
-	fmt.Println("  --format string      Output format (json or txt) (default \"txt\")")
-	fmt.Println("  --struct string      Inline struct definition")
-	fmt.Println("  --path string        Path to file or directory containing struct definitions")
-	fmt.Println("  --svg                Generate SVG visualization (default false)")
-	fmt.Println("  --strategies string  Comma-separated list of optimization strategies to use")
-	fmt.Println("                       Available strategies: alignment, size, group, greedy (default: all)")
-	fmt.Println("  --max-packages int   Maximum number of packages to analyze (0 for unlimited)")
-	fmt.Println("                       (default: 500)")
-	fmt.Println("  --skip-errors        Skip packages with errors instead of failing (default true)")
-	fmt.Println("  --verbose            Enable verbose output with detailed warnings (default false)")
-	fmt.Println("  --timeout int        Timeout in seconds for package loading (0 for no timeout)")
-	fmt.Println("                       (default: 300)")
-	fmt.Println("  --version            Show version information")
-	fmt.Println("  --help               Show help message")
+	fmt.Println("  --format string               Output format (json or txt) (default \"txt\")")
+	fmt.Println("  --path string                 Path to file or directory containing struct definitions")
+	fmt.Println("  --svg                         Generate SVG visualization (default false). Each found struct will be saved as a separate file.")
+	fmt.Println("  --strategies string           Comma-separated list of optimization strategies to use")
+	fmt.Println("                                Available strategies: alignment, size, group, greedy (default: all)")
+	fmt.Println("  --max-packages int            Maximum number of packages to analyze (0 for unlimited)")
+	fmt.Println("                                (default: 1500)")
+	fmt.Println("  --skip-errors                 Skip packages with errors instead of failing (default true)")
+	fmt.Println("  --verbose                     Enable verbose output with detailed warnings (default false)")
+	fmt.Println("  --timeout int                 Timeout in seconds for package loading (0 for no timeout)")
+	fmt.Println("                                (default: 300)")
+	fmt.Println("  --version                     Show version information")
+	fmt.Println("  --help                        Show help message")
 	fmt.Println()
 	fmt.Println("Examples:")
-	fmt.Println("  ./viztruct --struct 'type MyStruct struct { a int; b string }'")
-	fmt.Println("  ./viztruct --path structs.go")
-	fmt.Println("  ./viztruct --path /path/to/project/dir")
-	fmt.Println("  ./viztruct --strategies=\"greedy,group\" --path structs.go")
-	fmt.Println("  ./viztruct --format json --struct 'type MyStruct struct { a int; b string }'")
-	fmt.Println("  ./viztruct --svg --struct 'type MyStruct struct { a int; b string }'")
-	fmt.Println("  ./viztruct --max-packages=100 --timeout=60 --verbose --path /path/to/huge/project")
+	fmt.Println("  viztruct --path ./internal/samples/dumb_service --format=json")
+	fmt.Println("  viztruct --path .")
+	fmt.Println("  viztruct --path /path/to/project/dir")
+	fmt.Println("  viztruct --strategies=\"greedy,group\" --path ./project")
+	fmt.Println("  viztruct --svg --path ./internal/samples/dumb_service")
+	fmt.Println("  viztruct --max-packages=100 --timeout=60 --verbose --path /path/to/huge/project")
 }
 
 func main() {
-	structArg := flag.String("struct", "", "Inline struct definition")
 	directoryPathArg := flag.String("path", "", "Path to directory containing struct definitions")
 	formatArg := flag.String("format", string(FormatText), "Output format (json or txt)")
-	svgArg := flag.Bool("svg", false, "Generate SVG visualization")
+	svgArg := flag.Bool("svg", false, "Generate SVG visualization. Each found struct will be saved as a separate file.")
 	versionArg := flag.Bool("version", false, "Show version information")
 	helpArg := flag.Bool("help", false, "Show help message")
 	strategiesArg := flag.String("strategies", "", "Comma-separated list of optimization strategies to use")
@@ -415,9 +398,7 @@ func main() {
 		structi.SetTimeout(*timeoutArg)
 	}
 
-	if *structArg != "" {
-		analyzeInlineStructs(*structArg, format, *svgArg, strategyNames)
-	} else if *directoryPathArg != "" {
+	if *directoryPathArg != "" {
 		analyzeFromPath(*directoryPathArg, format, *svgArg, strategyNames)
 	} else {
 		fmt.Fprintf(os.Stderr, "error: no struct definition provided\n")
