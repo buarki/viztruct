@@ -584,10 +584,9 @@ func processPackagesSequentially(pkgs []*packages.Package, strategyNames []strin
 	var allInfos [][]Info
 
 	for i, pkg := range pkgs {
-		// skip packages with errors if configured to do so
 		if len(pkg.Errors) > 0 {
 			if skipErrors {
-				logf("skipping package %s due to errors\n", pkg.PkgPath)
+				logf("skipping package %s of path %s due to errors: %v\n", pkg.Name, pkg.PkgPath, pkg.Errors)
 				continue
 			} else {
 				return nil, fmt.Errorf("error in package %s: %v", pkg.PkgPath, pkg.Errors[0])
