@@ -17,6 +17,11 @@ var (
 	binVersion = "devel"
 )
 
+const (
+	defaultHeaderWidth  = 74
+	structNameMaxLength = 60
+)
+
 type OutputFormat string
 
 const (
@@ -111,10 +116,27 @@ func processResults(structGroups [][]structi.Info, format OutputFormat, generate
 			}
 
 			for i, s := range group {
-				headerText := fmt.Sprintf(" STRUCT: %s ", s.Name)
-				headerWidth := 74 // match box width
+				displayName := s.Name
+				if len(displayName) > structNameMaxLength {
+					// keep structNameMaxLength - 3 chars and add "..." for exactly structNameMaxLength length
+					displayName = displayName[:structNameMaxLength-3] + "..."
+				}
+
+				headerText := fmt.Sprintf(" STRUCT: %s ", displayName)
+				headerWidth := defaultHeaderWidth
+
+				if len(headerText) > headerWidth-4 {
+					headerWidth = len(headerText) + 4
+				}
+
 				leftPadding := (headerWidth - len(headerText)) / 2
+				if leftPadding < 0 {
+					leftPadding = 0
+				}
 				rightPadding := headerWidth - len(headerText) - leftPadding
+				if rightPadding < 0 {
+					rightPadding = 0
+				}
 
 				fmt.Println("┏" + strings.Repeat("━", headerWidth) + "┓")
 				fmt.Println("┃" + strings.Repeat(" ", leftPadding) + headerText + strings.Repeat(" ", rightPadding) + "┃")
@@ -142,7 +164,7 @@ func processResults(structGroups [][]structi.Info, format OutputFormat, generate
 				fmt.Printf("  Padding: %d bytes in %d locations\n", totalPaddingBytes, paddingCount)
 
 				fmt.Println("\n  Original memory layout:")
-				fmt.Println("  ┌" + strings.Repeat("─", 70) + "┐")
+				fmt.Println("  ┌" + strings.Repeat("─", headerWidth-4) + "┐")
 
 				for _, f := range s.Fields {
 					prefix := "  │ "
@@ -154,12 +176,21 @@ func processResults(structGroups [][]structi.Info, format OutputFormat, generate
 							prefix, f.Name+":", f.Offset, f.Size, f.Align)
 					}
 				}
-				fmt.Println("  └" + strings.Repeat("─", 70) + "┘")
+				fmt.Println("  └" + strings.Repeat("─", headerWidth-4) + "┘")
 
-				fmt.Println("\n  " + strings.Repeat("▼", 35) + " OPTIMIZED " + strings.Repeat("▼", 35))
+				optimizedText := " OPTIMIZED "
+				chevronCount := (headerWidth - len(optimizedText)) / 2
+				leftChevrons := strings.Repeat("▼", chevronCount)
+				rightChevrons := leftChevrons
+
+				if (headerWidth-len(optimizedText))%2 != 0 {
+					rightChevrons = strings.Repeat("▼", chevronCount+1)
+				}
+
+				fmt.Println("\n  " + leftChevrons + optimizedText + rightChevrons)
 
 				fmt.Println("\n  Optimized layout:")
-				fmt.Println("  ┌" + strings.Repeat("─", 70) + "┐")
+				fmt.Println("  ┌" + strings.Repeat("─", headerWidth-4) + "┐")
 
 				for _, f := range s.OptimizedFields {
 					prefix := "  │ "
@@ -171,11 +202,11 @@ func processResults(structGroups [][]structi.Info, format OutputFormat, generate
 							prefix, f.Name+":", f.Offset, f.Size, f.Align)
 					}
 				}
-				fmt.Println("  └" + strings.Repeat("─", 70) + "┘")
+				fmt.Println("  └" + strings.Repeat("─", headerWidth-4) + "┘")
 
 				fmt.Println("\n  Field details:")
 				fmt.Printf("  %-20s %-20s %-10s %-10s %-10s\n", "Name", "Type", "Size", "Align", "Offset")
-				fmt.Println("  " + strings.Repeat("─", 70))
+				fmt.Println("  " + strings.Repeat("─", headerWidth-4))
 				for _, f := range s.Fields {
 					if !f.IsPadding {
 						fmt.Printf("  %-20s %-20s %-10d %-10d %-10d\n",
