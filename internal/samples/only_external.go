@@ -2,8 +2,6 @@ package samples
 
 import (
 	"sync/atomic"
-
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 type BadLayout struct {
@@ -11,7 +9,6 @@ type BadLayout struct {
 	count     atomic.Int64
 	ID        uint64
 	Confirmed bool
-	myChan    chan prometheus.Counter
 	Age       uint32
 }
 
