@@ -65,7 +65,15 @@ func (o Optimizer) Optimize(fields []fieldWithMeta) []Field {
 		offset += f.size
 	}
 
-	// add final padding for struct alignment
+	result = addTailPadding(result, arrangedFields, offset)
+
+	return result
+}
+
+// addTailPadding appends the correct tail padding to a layout result.
+// If the last real field has zero size (e.g. struct{}), Go adds padding equal to structAlign.
+// Otherwise, standard alignment-based tail padding is added.
+func addTailPadding(result []Field, arrangedFields []fieldWithMeta, offset int64) []Field {
 	var structAlign int64 = 1
 	for _, f := range arrangedFields {
 		if f.align > structAlign {
@@ -73,7 +81,23 @@ func (o Optimizer) Optimize(fields []fieldWithMeta) []Field {
 		}
 	}
 
-	if rem := offset % structAlign; rem != 0 {
+	lastFieldIsZeroSize := false
+	if len(arrangedFields) > 0 {
+		if arrangedFields[len(arrangedFields)-1].size == 0 {
+			lastFieldIsZeroSize = true
+		}
+	}
+
+	if lastFieldIsZeroSize && offset > 0 {
+		result = append(result, Field{
+			Name:      "tail padding",
+			TypeName:  "",
+			Offset:    offset,
+			Size:      structAlign,
+			Align:     1,
+			IsPadding: true,
+		})
+	} else if rem := offset % structAlign; rem != 0 {
 		paddingSize := structAlign - rem
 		result = append(result, Field{
 			Name:      "tail padding",
@@ -262,25 +286,7 @@ func (g GreedyOptimizer) Optimize(fields []fieldWithMeta) []Field {
 		offset += f.size
 	}
 
-	// add final padding for struct alignment
-	var structAlign int64 = 1
-	for _, f := range arrangedFields {
-		if f.align > structAlign {
-			structAlign = f.align
-		}
-	}
-
-	if rem := offset % structAlign; rem != 0 {
-		paddingSize := structAlign - rem
-		result = append(result, Field{
-			Name:      "tail padding",
-			TypeName:  "",
-			Offset:    offset,
-			Size:      paddingSize,
-			Align:     1,
-			IsPadding: true,
-		})
-	}
+	result = addTailPadding(result, arrangedFields, offset)
 
 	// step 3: Greedy-specific post-processing
 	// sort by offset for proper display
@@ -288,11 +294,11 @@ func (g GreedyOptimizer) Optimize(fields []fieldWithMeta) []Field {
 		return result[i].Offset < result[j].Offset
 	})
 
-	return recalculatePadding(result)
+	return recalculatePadding(result, arrangedFields)
 }
 
 // recalculate padding between fields - specifically for greedy packing
-func recalculatePadding(fields []Field) []Field {
+func recalculatePadding(fields []Field, arrangedFields []fieldWithMeta) []Field {
 	// remove all padding fields
 	var nonPaddingFields []Field
 	for _, f := range fields {
@@ -345,7 +351,25 @@ func recalculatePadding(fields []Field) []Field {
 	if len(result) > 0 {
 		lastField := result[len(result)-1]
 		maxOffset := lastField.Offset + lastField.Size
-		if rem := maxOffset % structAlign; rem != 0 {
+
+		// check if the last arranged field has zero size (e.g. struct{})
+		lastArrangedIsZeroSize := false
+		if len(arrangedFields) > 0 {
+			if arrangedFields[len(arrangedFields)-1].size == 0 {
+				lastArrangedIsZeroSize = true
+			}
+		}
+
+		if lastArrangedIsZeroSize && maxOffset > 0 {
+			result = append(result, Field{
+				Name:      "tail padding",
+				TypeName:  "",
+				Offset:    maxOffset,
+				Size:      structAlign,
+				Align:     1,
+				IsPadding: true,
+			})
+		} else if rem := maxOffset % structAlign; rem != 0 {
 			paddingSize := structAlign - rem
 			result = append(result, Field{
 				Name:      "tail padding",
