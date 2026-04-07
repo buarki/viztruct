@@ -4,7 +4,6 @@ package template
 // are unsupported in the WebAssembly runtime environment (e.g., browsers)
 var (
 	StructLayoutTemplate = `{{define "struct_layout"}}
-{{$lastFieldY := 0.0}}
 
 {{/* Calculate the needed height based on content */}}
 {{$totalFields := len .Fields}}
@@ -12,134 +11,151 @@ var (
 {{$totalBreakdownFields := len .FieldBreakdown}}
 {{$totalCodeLines := len .OptimizedFieldsCode}}
 
-{{/* Calculate estimated height */}}
-{{$heightForFields := mul 40.0 (float64 $totalFields)}}
-{{$heightForBreakdown := mul 15.0 (float64 $totalBreakdownFields)}}
-{{$heightForOptimizedFields := mul 40.0 (float64 $totalOptimizedFields)}}
-{{$heightForCode := mul 15.0 (float64 $totalCodeLines)}}
-
-{{/* Base height plus calculated content height */}}
-{{$baseHeight := 500.0}}
-{{$calculatedHeight := add $baseHeight $heightForFields}}
-{{$calculatedHeight := add $calculatedHeight $heightForBreakdown}}
-{{$calculatedHeight := add $calculatedHeight $heightForOptimizedFields}}
-{{$calculatedHeight := add $calculatedHeight $heightForCode}}
-
-{{/* Minimum height of 1700, or calculated if larger */}}
-{{$svgHeight := 1700.0}}
-{{if gt $calculatedHeight $svgHeight}}
-  {{$svgHeight = $calculatedHeight}}
+{{/* Side-by-side: use the taller column */}}
+{{$heightForFields := mul 34.0 (float64 $totalFields)}}
+{{$heightForOptimizedFields := mul 34.0 (float64 $totalOptimizedFields)}}
+{{$maxFieldsHeight := $heightForFields}}
+{{if gt $heightForOptimizedFields $heightForFields}}
+  {{$maxFieldsHeight = $heightForOptimizedFields}}
 {{end}}
 
-{{/* Add extra padding to ensure everything fits */}}
-{{$svgHeight := add $svgHeight 300.0}}
+{{$heightForBreakdown := mul 18.0 (float64 $totalBreakdownFields)}}
+{{$heightForCode := mul 18.0 (float64 $totalCodeLines)}}
 
-<svg width="1200" height="{{$svgHeight}}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-		<style>
-			.field-text { font-family: Arial, sans-serif; font-size: 14px; fill: #000000; }
-			.field-label { font-family: Arial, sans-serif; font-size: 14px; fill: #000000; text-anchor: end; }
-			.struct-name { font-family: Arial, sans-serif; font-size: 16px; font-weight: bold; fill: #000000; }
-			.offset-text { font-family: Arial, sans-serif; font-size: 12px; fill: #000000; }
-			.size-text { font-family: Arial, sans-serif; font-size: 12px; fill: #000000; }
-			.padding-pattern { fill: #CCCCCC; fill-opacity: 0.3; }
-		</style>
-		<rect width="100%" height="100%" fill="white"/>
-	<text x="10" y="50" class="struct-name" fill="#000000">{{.Name}}</text>
-<text x="10" y="70" class="field-text" fill="#000000">Total size: {{.TotalSize}} bytes | Wasted: {{.WastedBytes}} bytes ({{.WastedPercent}}%)</text>
-<text x="10" y="90" class="field-text" fill="#000000">Original layout:</text>
+{{/* header(100) + stats(50) + labels+headers(50) + fields + gap(30) + breakdown + gap(30) + code */}}
+{{$svgHeight := 280.0}}
+{{$svgHeight := add $svgHeight $maxFieldsHeight}}
+{{$svgHeight := add $svgHeight $heightForBreakdown}}
+{{$svgHeight := add $svgHeight $heightForCode}}
+{{$svgHeight := add $svgHeight 80.0}}
 
-<!-- Original Layout (Vertical) -->
-<text x="200" y="120" class="offset-text" fill="#000000">Offset</text>
-<text x="300" y="120" class="offset-text" fill="#000000">Field</text>
-<text x="650" y="120" class="offset-text" fill="#000000">Size</text>
+{{$svgWidth := 1100.0}}
+{{$colWidth := 510.0}}
+{{$leftX := 24.0}}
+{{$rightX := 560.0}}
+{{$barWidth := 260.0}}
+{{$rowHeight := 34.0}}
 
-{{$xPos := 300.0}}
-{{$barWidth := 350.0}}
-{{$yOffset := 140.0}}
-{{$rowHeight := 40.0}}
-{{$currentOffset := 0}}
+<svg width="{{$svgWidth}}" height="{{$svgHeight}}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<style>
+		.field-text { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace; font-size: 12px; fill: #374151; }
+		.field-label { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace; font-size: 11.5px; fill: #1f2937; font-weight: 600; text-anchor: end; }
+		.struct-name { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 18px; font-weight: 700; fill: #111827; }
+		.section-label { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; font-weight: 600; fill: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+		.offset-text { font-family: 'SF Mono', Consolas, monospace; font-size: 11px; fill: #6b7280; }
+		.size-text { font-family: 'SF Mono', Consolas, monospace; font-size: 11px; fill: #6b7280; }
+		.stat-value { font-family: 'SF Mono', Consolas, monospace; font-size: 12px; fill: #374151; }
+		.stat-label { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 10px; fill: #9ca3af; text-transform: uppercase; }
+		.code-text { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace; font-size: 12px; fill: #d1d5db; }
+		.breakdown-text { font-family: 'SF Mono', Consolas, monospace; font-size: 11px; fill: #6b7280; }
+		.col-header { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 11px; fill: #9ca3af; }
+	</style>
 
-{{range .Fields}}
-<!-- Field offset marker -->
-{{$yPos := add $yOffset (div $rowHeight 2.0)}}
-{{$yPos := add $yPos 5.0}}
-<text x="200" y="{{$yPos}}" class="offset-text" text-anchor="end" fill="#000000">{{.Offset}}</text>
+	<!-- Background -->
+	<rect width="100%" height="100%" fill="#fafafa" rx="8"/>
+	<rect x="0" y="0" width="100%" height="100%" fill="none" stroke="#e5e7eb" stroke-width="1" rx="8"/>
 
-<!-- Field name -->
-<text x="280" y="{{$yPos}}" class="field-label" fill="#000000">{{.Name}}</text>
+	<!-- Header -->
+	<text x="24" y="34" class="struct-name">{{.Name}}</text>
 
-<!-- Field bar -->
-<rect x="{{$xPos}}" y="{{$yOffset}}" width="{{$barWidth}}" height="{{$rowHeight}}" fill="{{.Color}}" stroke="{{if .IsPadding}}gray{{else}}black{{end}}" stroke-width="1" {{if .IsPadding}}stroke-dasharray="5,5"{{end}}/>
+	<!-- Stats bar -->
+	<rect x="24" y="46" width="1052" height="36" rx="6" fill="#f3f4f6" stroke="#e5e7eb" stroke-width="0.5"/>
+	<text x="40" y="62" class="stat-label">SIZE</text>
+	<text x="40" y="76" class="stat-value">{{.TotalSize}}B</text>
+	<text x="130" y="62" class="stat-label">WASTED</text>
+	<text x="130" y="76" class="stat-value">{{.WastedBytes}}B ({{printf "%.1f" .WastedPercent}}%)</text>
+	<text x="310" y="62" class="stat-label">OPTIMIZED</text>
+	<text x="310" y="76" class="stat-value">{{.OptimizedSize}}B</text>
+	{{if lt 0 .SavedBytes}}<text x="440" y="62" class="stat-label">SAVED</text>
+	<text x="440" y="76" class="stat-value" fill="#059669">{{.SavedBytes}}B ({{printf "%.1f" .SavedPercent}}%)</text>{{end}}
 
-<!-- Field size -->
-{{$labelX := add $xPos $barWidth}}
-{{$labelX := add $labelX 20.0}}
-<text x="{{$labelX}}" y="{{$yPos}}" class="size-text" fill="#000000">{{.Size}} bytes</text>
+	<!-- ==================== SIDE BY SIDE LAYOUTS ==================== -->
 
-<!-- Update for next row -->
-{{$yOffset = add $yOffset $rowHeight}}
-{{end}}
+	<!-- LEFT: Original Layout -->
+	<text x="{{$leftX}}" y="108" class="section-label">Original Layout</text>
+	<text x="{{add $leftX 286.0}}" y="108" class="stat-value" font-size="10" fill="#9ca3af">{{.TotalSize}} bytes</text>
 
-<!-- End offset marker -->
-<text x="200" y="{{$yOffset}}" class="offset-text" text-anchor="end" fill="#000000">{{.TotalSize}}</text>
+	<!-- Left column headers -->
+	<text x="{{add $leftX 42.0}}" y="126" class="col-header">Off</text>
+	<text x="{{add $leftX 120.0}}" y="126" class="col-header">Field</text>
+	<text x="{{add $leftX 438.0}}" y="126" class="col-header">Size</text>
 
-<!-- Field breakdown -->
-{{$breakdownY := add $yOffset 50.0}}
-<text x="10" y="{{$breakdownY}}" class="field-text" fill="#000000">Field breakdown:</text>
-{{range $i, $f := .FieldBreakdown}}
-{{$itemY := add $yOffset 70.0}}
-{{$itemY := add $itemY (mul (float64 $i) 15.0)}}
-<text x="10" y="{{$itemY}}" class="field-text" fill="{{if $f.IsPadding}}#FF0000{{else}}#000000{{end}}">{{$f.Text}}</text>
-{{end}}
+	{{$leftYOffset := 136.0}}
+	{{$leftBarX := add $leftX 135.0}}
 
-<!-- Optimized Layout (Vertical) -->
-{{$optimizedYOffset := add $yOffset 100.0}}
-{{$optimizedYOffset := add $optimizedYOffset (mul (float64 (len .FieldBreakdown)) 15.0)}}
-<text x="10" y="{{$optimizedYOffset}}" class="field-text" fill="#000000">Optimized layout: {{.OptimizedSize}} bytes (saved {{.SavedBytes}} bytes, {{.OptimizedWastePercent}}% waste)</text>
+	{{range .Fields}}
+	{{$yPos := add $leftYOffset (div $rowHeight 2.0)}}
+	{{$yPos := add $yPos 3.0}}
+	<text x="{{add $leftX 42.0}}" y="{{$yPos}}" class="offset-text" text-anchor="end">{{.Offset}}</text>
+	<text x="{{add $leftX 120.0}}" y="{{$yPos}}" class="field-label">{{.Name}}</text>
+	<rect x="{{$leftBarX}}" y="{{add $leftYOffset 2.0}}" width="{{$barWidth}}" height="{{sub $rowHeight 4.0}}" rx="3" fill="{{.Color}}" stroke="{{if .IsPadding}}#d1d5db{{else}}#374151{{end}}" stroke-width="{{if .IsPadding}}1{{else}}0.5{{end}}" stroke-opacity="0.5" {{if .IsPadding}}stroke-dasharray="4,3"{{end}} fill-opacity="{{if .IsPadding}}0.45{{else}}0.85{{end}}"/>
+	<text x="{{add $leftBarX 272.0}}" y="{{$yPos}}" class="size-text">{{.Size}}B</text>
+	{{$leftYOffset = add $leftYOffset $rowHeight}}
+	{{end}}
+	<text x="{{add $leftX 42.0}}" y="{{add $leftYOffset 3.0}}" class="offset-text" text-anchor="end">{{.TotalSize}}</text>
 
-{{$headerY := add $optimizedYOffset 30.0}}
-<text x="200" y="{{$headerY}}" class="offset-text" fill="#000000">Offset</text>
-<text x="300" y="{{$headerY}}" class="offset-text" fill="#000000">Field</text>
-<text x="650" y="{{$headerY}}" class="offset-text" fill="#000000">Size</text>
+	<!-- Vertical divider -->
+	<line x1="{{sub $rightX 12.0}}" y1="100" x2="{{sub $rightX 12.0}}" y2="{{add $leftYOffset 10.0}}" stroke="#e5e7eb" stroke-width="1"/>
 
-{{$yOffset = add $optimizedYOffset 50.0}}
-{{range .OptimizedFields}}
-<!-- Field offset marker -->
-{{$yPos := add $yOffset (div $rowHeight 2.0)}}
-{{$yPos := add $yPos 5.0}}
-<text x="200" y="{{$yPos}}" class="offset-text" text-anchor="end" fill="#000000">{{.Offset}}</text>
+	<!-- RIGHT: Optimized Layout -->
+	<text x="{{$rightX}}" y="108" class="section-label">Optimized Layout</text>
+	<text x="{{add $rightX 286.0}}" y="108" class="stat-value" font-size="10" fill="#059669">{{.OptimizedSize}} bytes ({{printf "%.1f" .OptimizedWastePercent}}% waste)</text>
 
-<!-- Field name -->
-<text x="280" y="{{$yPos}}" class="field-label" fill="#000000">{{.Name}}</text>
+	<!-- Right column headers -->
+	<text x="{{add $rightX 42.0}}" y="126" class="col-header">Off</text>
+	<text x="{{add $rightX 120.0}}" y="126" class="col-header">Field</text>
+	<text x="{{add $rightX 438.0}}" y="126" class="col-header">Size</text>
 
-<!-- Field bar -->
-<rect x="{{$xPos}}" y="{{$yOffset}}" width="{{$barWidth}}" height="{{$rowHeight}}" fill="{{.Color}}" stroke="{{if .IsPadding}}gray{{else}}black{{end}}" stroke-width="1" {{if .IsPadding}}stroke-dasharray="5,5"{{end}}/>
+	{{$rightYOffset := 136.0}}
+	{{$rightBarX := add $rightX 135.0}}
 
-<!-- Field size -->
-{{$labelX := add $xPos $barWidth}}
-{{$labelX := add $labelX 20.0}}
-<text x="{{$labelX}}" y="{{$yPos}}" class="size-text" fill="#000000">{{.Size}} bytes</text>
+	{{range .OptimizedFields}}
+	{{$yPos := add $rightYOffset (div $rowHeight 2.0)}}
+	{{$yPos := add $yPos 3.0}}
+	<text x="{{add $rightX 42.0}}" y="{{$yPos}}" class="offset-text" text-anchor="end">{{.Offset}}</text>
+	<text x="{{add $rightX 120.0}}" y="{{$yPos}}" class="field-label">{{.Name}}</text>
+	<rect x="{{$rightBarX}}" y="{{add $rightYOffset 2.0}}" width="{{$barWidth}}" height="{{sub $rowHeight 4.0}}" rx="3" fill="{{.Color}}" stroke="{{if .IsPadding}}#d1d5db{{else}}#374151{{end}}" stroke-width="{{if .IsPadding}}1{{else}}0.5{{end}}" stroke-opacity="0.5" {{if .IsPadding}}stroke-dasharray="4,3"{{end}} fill-opacity="{{if .IsPadding}}0.45{{else}}0.85{{end}}"/>
+	<text x="{{add $rightBarX 272.0}}" y="{{$yPos}}" class="size-text">{{.Size}}B</text>
+	{{$rightYOffset = add $rightYOffset $rowHeight}}
+	{{end}}
+	<text x="{{add $rightX 42.0}}" y="{{add $rightYOffset 3.0}}" class="offset-text" text-anchor="end">{{.OptimizedSize}}</text>
 
-<!-- Update for next row -->
-{{$yOffset = add $yOffset $rowHeight}}
-{{end}}
+	<!-- ==================== BELOW BOTH COLUMNS ==================== -->
 
-<!-- End offset marker -->
-<text x="200" y="{{$yOffset}}" class="offset-text" text-anchor="end" fill="#000000">{{.OptimizedSize}}</text>
+	<!-- Use the taller column's Y offset -->
+	{{$bottomY := $leftYOffset}}
+	{{if gt $rightYOffset $leftYOffset}}{{$bottomY = $rightYOffset}}{{end}}
 
-<!-- Suggested Code -->
-{{$codeY := add $yOffset 50.0}}
-<text x="10" y="{{$codeY}}" class="field-text" fill="#000000">Suggested code:</text>
-{{$codeHeaderY := add $yOffset 70.0}}
-<text x="10" y="{{$codeHeaderY}}" class="field-text" fill="#000000">type {{.Name}}Optimized struct {</text>
-{{range $i, $f := .OptimizedFieldsCode}}
-{{$lineY := add $yOffset 85.0}}
-{{$lineY := add $lineY (mul (float64 $i) 15.0)}}
-<text x="10" y="{{$lineY}}" class="field-text" fill="#000000">    {{$f}}</text>
-{{end}}
-{{$endY := add $yOffset 85.0}}
-{{$endY := add $endY (mul (float64 (len .OptimizedFieldsCode)) 15.0)}}
-<text x="10" y="{{$endY}}" class="field-text" fill="#000000">}</text>
+	<!-- Horizontal divider -->
+	{{$dividerY := add $bottomY 20.0}}
+	<line x1="24" y1="{{$dividerY}}" x2="1076" y2="{{$dividerY}}" stroke="#e5e7eb" stroke-width="1"/>
+
+	<!-- Field details -->
+	{{$detailsY := add $dividerY 22.0}}
+	<text x="24" y="{{$detailsY}}" class="section-label">Field Details</text>
+	{{$detailStartY := add $detailsY 18.0}}
+	{{range $i, $f := .FieldBreakdown}}
+	{{$itemY := add $detailStartY (mul (float64 $i) 18.0)}}
+	<text x="32" y="{{$itemY}}" class="breakdown-text" fill="{{if $f.IsPadding}}#ef4444{{else}}#6b7280{{end}}">{{$f.Text}}</text>
+	{{end}}
+
+	<!-- Suggested code -->
+	{{$codeY := add $detailStartY 14.0}}
+	{{$codeY := add $codeY (mul (float64 (len .FieldBreakdown)) 18.0)}}
+	<text x="24" y="{{$codeY}}" class="section-label">Suggested Code</text>
+	{{$codeBoxY := add $codeY 10.0}}
+	{{$codeBoxHeight := add 40.0 (mul (float64 (len .OptimizedFieldsCode)) 18.0)}}
+	<rect x="24" y="{{$codeBoxY}}" width="1052" height="{{$codeBoxHeight}}" rx="6" fill="#1f2937"/>
+	{{$codeHeaderY := add $codeBoxY 22.0}}
+	<text x="40" y="{{$codeHeaderY}}" class="code-text"><tspan fill="#c084fc">type</tspan> <tspan fill="#67e8f9">{{.Name}}Optimized</tspan> <tspan fill="#c084fc">struct</tspan> <tspan fill="#d1d5db">{</tspan></text>
+	{{range $i, $f := .OptimizedFieldsCode}}
+	{{$lineY := add $codeHeaderY 18.0}}
+	{{$lineY := add $lineY (mul (float64 $i) 18.0)}}
+	<text x="56" y="{{$lineY}}" class="code-text">{{$f}}</text>
+	{{end}}
+	{{$endY := add $codeHeaderY 18.0}}
+	{{$endY := add $endY (mul (float64 (len .OptimizedFieldsCode)) 18.0)}}
+	<text x="40" y="{{$endY}}" class="code-text">}</text>
 </svg>
 {{end}}`
 )
