@@ -17,23 +17,23 @@ const (
 )
 
 var typeColors = map[string]string{
-	"uint64":       "#4285F4", // blue
-	"uint32":       "#34A853", // green
-	"uint16":       "#FBBC05", // yellow
-	"uint8":        "#EA4335", // red
-	"int64":        "#4285F4", // blue
-	"int32":        "#34A853", // green
-	"int16":        "#FBBC05", // yellow
-	"int8":         "#EA4335", // red
-	"bool":         "#9C27B0", // purple
-	"string":       "#FF9800", // orange
-	"byte":         "#607D8B", // blue gray
-	"rune":         "#795548", // brown
-	"float64":      "#0097A7", // cyan
-	"float32":      "#00BCD4", // light cyan
-	"padding":      "#E0E0E0", // light gray for regular padding
-	"tail_padding": "#F5F5F5", // very light gray for tail padding
-	"unknown":      "#AAAAAA", // default gray for unknown types
+	"uint64":       "#6366f1", // indigo
+	"uint32":       "#10b981", // emerald
+	"uint16":       "#f59e0b", // amber
+	"uint8":        "#ef4444", // red
+	"int64":        "#6366f1", // indigo
+	"int32":        "#10b981", // emerald
+	"int16":        "#f59e0b", // amber
+	"int8":         "#ef4444", // red
+	"bool":         "#a855f7", // purple
+	"string":       "#f97316", // orange
+	"byte":         "#64748b", // slate
+	"rune":         "#78716c", // stone
+	"float64":      "#06b6d4", // cyan
+	"float32":      "#22d3ee", // light cyan
+	"padding":      "#d1d5db", // gray-300
+	"tail_padding": "#e5e7eb", // gray-200
+	"unknown":      "#9ca3af", // gray-400
 }
 
 type FieldData struct {
@@ -60,6 +60,7 @@ type TemplateData struct {
 	WastedPercent         float64
 	OptimizedSize         int64
 	SavedBytes            int64
+	SavedPercent          float64
 	OptimizedWastePercent float64
 	Fields                []FieldData
 	OptimizedFields       []FieldData
@@ -97,7 +98,8 @@ func BuildVisualization(structs []structi.Info) (map[string]string, error) {
 				return 0
 			}
 		},
-		"lt": func(a, b int64) bool { return a < b },
+		"lt":      func(a, b int64) bool { return a < b },
+		"printf":  func(format string, a interface{}) string { return fmt.Sprintf(format, a) },
 	})
 
 	tmpl, err := tmpl.Parse(svgTemplate.StructLayoutTemplate)
@@ -143,7 +145,8 @@ func BuildSingleVisualization(structs []structi.Info) (string, error) {
 				return 0
 			}
 		},
-		"lt": func(a, b int64) bool { return a < b },
+		"lt":      func(a, b int64) bool { return a < b },
+		"printf":  func(format string, a interface{}) string { return fmt.Sprintf(format, a) },
 	})
 
 	tmpl, err := tmpl.Parse(svgTemplate.StructLayoutTemplate)
@@ -265,6 +268,7 @@ func prepareTemplateData(info structi.Info) TemplateData {
 		WastedPercent:         wastedPercent,
 		OptimizedSize:         optimizedSize,
 		SavedBytes:            structTotalSize - optimizedSize,
+		SavedPercent:          func() float64 { if structTotalSize > 0 { return float64(structTotalSize-optimizedSize) / float64(structTotalSize) * 100 }; return 0 }(),
 		OptimizedWastePercent: optimizedWastedPercent,
 		Fields:                fields,
 		OptimizedFields:       optimizedFields,

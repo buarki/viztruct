@@ -25,61 +25,79 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.12/mode/go/go.min.js"></script>
     <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
             max-width: 1200px;
             margin: 0 auto;
-            padding: 15px;
+            padding: 16px;
             line-height: 1.6;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            background: #fafafa;
+            color: #1f2937;
         }
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 1rem 0;
-            margin-bottom: 2rem;
-            border-bottom: 1px solid #eee;
+            padding: 12px 0;
+            margin-bottom: 24px;
+            border-bottom: 1px solid #e5e7eb;
         }
         .header .logo {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: #4285F4;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #6366f1;
             text-decoration: none;
+            letter-spacing: -0.02em;
         }
         .header .github-link {
-            color: #333;
+            color: #6b7280;
             text-decoration: none;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 6px;
+            font-size: 0.875rem;
+            transition: color 0.15s;
         }
         .header .github-link:hover {
-            color: #4285F4;
+            color: #6366f1;
         }
         .main-content {
             flex: 1;
         }
         .footer {
             text-align: center;
-            padding: 1rem 0;
-            margin-top: 2rem;
-            border-top: 1px solid #eee;
-            color: #666;
-            font-size: 0.9rem;
+            padding: 16px 0;
+            margin-top: 32px;
+            border-top: 1px solid #e5e7eb;
+            color: #9ca3af;
+            font-size: 0.8rem;
+        }
+        .footer a {
+            color: #6b7280;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            color: #6366f1;
         }
         h1 {
-            color: #333;
-            border-bottom: 2px solid #eee;
-            padding-bottom: 10px;
-            font-size: 1.8rem;
+            color: #111827;
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin: 0 0 16px 0;
+            padding: 0;
+            border: none;
+            letter-spacing: -0.02em;
         }
         .container {
             display: flex;
-            gap: 20px;
-            margin-top: 20px;
+            gap: 16px;
+            margin-top: 16px;
             flex-direction: row;
         }
         .input-section, .optimized-section {
@@ -88,105 +106,139 @@
         }
         .CodeMirror {
             height: 250px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 13px;
         }
         .editor-container {
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
         button {
-            background-color: #4285F4;
+            background-color: #6366f1;
             color: white;
             border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
+            padding: 8px 16px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
+            font-weight: 500;
             white-space: nowrap;
+            transition: all 0.15s;
         }
         button:hover {
-            background-color: #3b78e7;
+            background-color: #4f46e5;
         }
         button:disabled {
-            background-color: #cccccc;
+            background-color: #d1d5db;
             cursor: not-allowed;
         }
         #errorOutput {
-            color: #d32f2f;
+            color: #dc2626;
             margin: 10px 0;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 14px;
-            background-color: #fff8f8;
-            padding: 10px;
-            border-left: 3px solid #d32f2f;
+            font-family: 'SF Mono', Consolas, monospace;
+            font-size: 13px;
+            background-color: #fef2f2;
+            padding: 12px;
+            border-left: 3px solid #dc2626;
+            border-radius: 0 6px 6px 0;
             white-space: pre-wrap;
             display: none;
         }
         #svgOutput {
             margin-top: 20px;
-            border: 1px solid #ddd;
-            padding: 10px;
             position: relative;
             overflow: auto;
             max-height: none;
         }
+        #svgOutput:empty {
+            display: none;
+        }
         #svgOutput svg {
             height: auto !important;
             width: 100%;
-            max-width: 1200px;
+            max-width: 1100px;
+            display: block;
+            margin: 0 auto;
         }
         .examples {
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             display: flex;
             flex-wrap: wrap;
+            gap: 8px;
         }
         .example-button {
-            background-color: #FBBC05;
-            color: black;
-            margin-right: 10px;
-            margin-bottom: 10px;
+            background-color: #f3f4f6;
+            color: #374151;
+            border: 1px solid #e5e7eb;
+            font-size: 13px;
+            padding: 6px 14px;
         }
         .example-button:hover {
-            background-color: #e0a800;
+            background-color: #e5e7eb;
+            color: #111827;
         }
         .copy-button {
-            background-color: #34A853;
-            padding: 5px 10px;
-            font-size: 14px;
+            background-color: #059669;
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+        .copy-button:hover {
+            background-color: #047857;
         }
         .section-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
         .section-title {
             margin: 0;
-            font-size: 1.2rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #374151;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
         }
         .button-container {
-            margin-top: 10px;
+            margin-top: 8px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 8px;
         }
-        
+
         .savings-banner {
-            background-color: #34A853;
+            background: linear-gradient(135deg, #059669, #10b981);
             color: white;
-            padding: 12px 15px;
-            font-weight: bold;
-            font-size: 16px;
+            padding: 12px 16px;
+            font-weight: 600;
+            font-size: 14px;
             text-align: center;
-            border-radius: 4px 4px 0 0;
-            margin-bottom: 0;
-            margin-top: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            margin: 16px auto 0;
+            max-width: 1100px;
         }
-        
+
+        .disclaimer {
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-left: 3px solid #6366f1;
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            color: #6b7280;
+            font-size: 0.85rem;
+            border-radius: 0 6px 6px 0;
+        }
+        .disclaimer a {
+            color: #6366f1;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .disclaimer a:hover {
+            text-decoration: underline;
+        }
+
         @media (max-width: 768px) {
             .container {
                 flex-direction: column;
@@ -195,13 +247,10 @@
                 width: 100%;
             }
             .CodeMirror {
-                height: 200px; 
+                height: 200px;
             }
             h1 {
-                font-size: 1.5rem;
-            }
-            .section-title {
-                font-size: 1.1rem;
+                font-size: 1.3rem;
             }
             .button-container {
                 flex-direction: column;
@@ -221,32 +270,14 @@
                 gap: 8px;
             }
         }
-        
+
         @media (min-width: 769px) and (max-width: 1024px) {
             .container {
-                gap: 15px;
+                gap: 12px;
             }
             .CodeMirror {
                 height: 220px;
             }
-            h1 {
-                font-size: 1.6rem;
-            }
-        }
-        .disclaimer {
-            background-color: #f8f9fa;
-            border-left: 4px solid #6c757d;
-            padding: 10px 15px;
-            margin-bottom: 20px;
-            color: #495057;
-            font-size: 0.9rem;
-        }
-        .disclaimer a {
-            color: #0366d6;
-            text-decoration: none;
-        }
-        .disclaimer a:hover {
-            text-decoration: underline;
         }
     </style>
 </head>
@@ -254,7 +285,7 @@
     <header class="header">
         <a href="/" class="logo">viztruct</a>
         <a href="https://github.com/buarki/viztruct" class="github-link" target="_blank">
-            <svg height="24" viewBox="0 0 16 16" width="24">
+            <svg height="20" viewBox="0 0 16 16" width="20">
                 <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
             </svg>
             GitHub
@@ -263,11 +294,11 @@
 
     <main class="main-content">
         <h1>Go Struct Memory Layout Visualizer</h1>
-        
+
         <div class="disclaimer">
-            <strong>Note:</strong> This web visualizer is a limited version of viztruct that support only explicitly defined types. For full functionality, including handling of external types and packages, please use the <a href="https://github.com/buarki/viztruct?tab=readme-ov-file#cli-installation" target="_blank">CLI version</a>.
+            <strong>Note:</strong> This web visualizer is a limited version of viztruct that supports only explicitly defined types. For full functionality, including handling of external types and packages, please use the <a href="https://github.com/buarki/viztruct?tab=readme-ov-file#cli-installation" target="_blank">CLI version</a>.
         </div>
-        
+
         <div class="examples">
             <button class="example-button" onclick="loadExample('simple')">Simple Example</button>
             <button class="example-button" onclick="loadExample('bad')">Bad Layout Example</button>
@@ -287,7 +318,7 @@
                     <div id="errorOutput"></div>
                 </div>
             </div>
-            
+
             <div class="optimized-section">
                 <div class="section-header">
                     <h3 class="section-title">Optimized Structs</h3>
@@ -298,22 +329,22 @@
                 </div>
             </div>
         </div>
-        
+
         <div id="memorySavings" style="display: none;">
         </div>
-        
+
         <div id="svgOutput"></div>
     </main>
 
     <footer class="footer">
-        Copyright © <span id="current-year"></span> <a href="https://buarki.com" target="_blank">buarki.com</a>. All rights reserved.
+        Copyright &copy; <span id="current-year"></span> <a href="https://buarki.com" target="_blank">buarki.com</a>. All rights reserved.
     </footer>
 
     <script>
         document.getElementById('current-year').textContent = new Date().getFullYear();
-        
+
         let inputEditor, outputEditor;
-        
+
         const examples = {
             simple: `type User struct {
     ID        uint64
@@ -346,7 +377,7 @@ type Rectangle struct {
     Filled      bool
 }`
         };
-        
+
         document.addEventListener('DOMContentLoaded', function() {
             inputEditor = CodeMirror.fromTextArea(document.getElementById('structInput'), {
                 mode: 'go',
@@ -356,7 +387,7 @@ type Rectangle struct {
                 autoCloseBrackets: true,
                 matchBrackets: true
             });
-            
+
             outputEditor = CodeMirror.fromTextArea(document.getElementById('optimizedOutput'), {
                 mode: 'go',
                 theme: 'material',
@@ -364,15 +395,15 @@ type Rectangle struct {
                 indentUnit: 4,
                 readOnly: true
             });
-            
+
             loadExample('simple');
-            
+
             window.addEventListener('resize', function() {
                 if (inputEditor) inputEditor.refresh();
                 if (outputEditor) outputEditor.refresh();
             });
         });
-        
+
         function loadExample(name) {
             if (inputEditor) {
                 inputEditor.setValue(examples[name]);
@@ -381,7 +412,7 @@ type Rectangle struct {
                 document.getElementById('structInput').value = examples[name];
             }
         }
-        
+
         function copyOptimized() {
             const optimizedText = outputEditor ? outputEditor.getValue() : document.getElementById('optimizedOutput').value;
             navigator.clipboard.writeText(optimizedText).then(() => {
@@ -392,7 +423,7 @@ type Rectangle struct {
                 }, 2000);
             });
         }
-        
+
         function formatBytesAtScale(bytes) {
             if (bytes < 1024) {
                 return bytes + ' bytes';
@@ -404,50 +435,42 @@ type Rectangle struct {
                 return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
             }
         }
-        
-        // it will inject the memory savings into the svg
+
         function injectMemorySavingsIntoSVG(svgString, byteSavings) {
             const wrappedSvg = `<div>${svgString}</div>`;
             const parser = new DOMParser();
             const doc = parser.parseFromString(wrappedSvg, "text/html");
             const svgs = doc.querySelectorAll("svg");
-            
+
             if (svgs.length === 0) return svgString;
-            
-            // calculate total bytes saved across all structs for verification
+
             let totalBytesSaved = 0;
-            
+
             svgs.forEach((svg, index) => {
                 const textElements = svg.querySelectorAll("text");
-                let structNameElement = null;
                 let optimizedLayoutElement = null;
-                let originalSizeElement = null;
-                let optimizedSizeElement = null;
-                let svgWidth = parseInt(svg.getAttribute("width")) || 1000;
-                
                 let structName = "";
                 let bytesSaved = 0;
                 let originalSize = 0;
                 let optimizedSize = 0;
-                
+
                 for (const textElement of textElements) {
                     const text = textElement.textContent;
-                    
+
                     if (text && !text.includes(":") && !structName) {
                         structName = text.trim();
                     }
-                    
+
                     if (text.includes("Total size:")) {
-                        originalSizeElement = textElement;
                         const sizeMatch = text.match(/Total size: (\d+) bytes/);
                         if (sizeMatch && sizeMatch[1]) {
                             originalSize = parseInt(sizeMatch[1], 10);
                         }
                     }
-                    
+
                     if (text.includes("Optimized layout:")) {
                         optimizedLayoutElement = textElement;
-                        
+
                         const layoutMatch = text.match(/Optimized layout: (\d+) bytes \(saved (\d+) bytes/);
                         if (layoutMatch && layoutMatch[1] && layoutMatch[2]) {
                             optimizedSize = parseInt(layoutMatch[1], 10);
@@ -456,58 +479,50 @@ type Rectangle struct {
                         }
                     }
                 }
-                
+
                 let structSavingsPerMillion = 0;
                 if (bytesSaved > 0) {
-                    structSavingsPerMillion = bytesSaved * 1000000; // 1 million instances
+                    structSavingsPerMillion = bytesSaved * 1000000;
                 }
-                
+
                 const savingsText = formatBytesAtScale(structSavingsPerMillion);
-                console.log(`Struct: ${structName}, Original size: ${originalSize}, Optimized size: ${optimizedSize}, Bytes saved: ${bytesSaved}, Per million: ${savingsText}`);
-                
-                if (optimizedLayoutElement) {
-                    const y = parseFloat(optimizedLayoutElement.getAttribute("y"));
-                    
-                    const savingsElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                    savingsElement.setAttribute("x", svgWidth - 40);
-                    savingsElement.setAttribute("y", y);
-                    savingsElement.setAttribute("fill", "#34A853");
-                    savingsElement.setAttribute("font-weight", "bold");
-                    savingsElement.setAttribute("text-anchor", "end");
-                    savingsElement.textContent = `Memory savings at scale: ${savingsText} per million allocations`;
-                    
-                    svg.appendChild(savingsElement);
+
+                if (bytesSaved > 0) {
+                    const memorySavingsDiv = document.getElementById('memorySavings');
+                    memorySavingsDiv.style.display = 'block';
+                    memorySavingsDiv.className = 'savings-banner';
+                    memorySavingsDiv.textContent = `${structName}: saves ${bytesSaved} bytes/struct = ${savingsText} per million allocations`;
                 }
             });
-            
-            console.log(`Total bytes saved across all structs: ${totalBytesSaved}`);
-            
+
             const result = [];
             svgs.forEach(svg => {
                 result.push(svg.outerHTML);
             });
-            
+
             return result.join("");
         }
-        
+
         async function visualizeGoStruct() {
             const structInput = inputEditor ? inputEditor.getValue() : document.getElementById('structInput').value;
-            
+
+            document.getElementById('memorySavings').style.display = 'none';
+
             try {
                 const result = window.generateStructLayoutSVG(structInput);
-                
+
                 if (result.error) {
                     let errorMessage = result.error;
-                    
+
                     if (errorMessage.includes("undefined:") || errorMessage.includes("package is undefined")) {
-                        errorMessage = "⚠️ External Type Error ⚠️\n\n" + 
+                        errorMessage = "External Type Error\n\n" +
                             "This web visualizer cannot process external types that aren't defined in your input.\n\n" +
                             "For types like 'time.Time' or other imported packages, you have two options:\n" +
                             "1. Define the struct inline with your input\n" +
                             "2. Use the CLI version which supports external types\n\n" +
                             "Original error: " + errorMessage;
                     }
-                    
+
                     const errorOutput = document.getElementById('errorOutput');
                     errorOutput.textContent = errorMessage;
                     errorOutput.style.display = 'block';
@@ -520,52 +535,53 @@ type Rectangle struct {
                     }
                     return;
                 }
-                
+
                 document.getElementById('errorOutput').style.display = 'none';
                 document.getElementById('errorOutput').textContent = '';
-                
+
                 let svgString = new TextDecoder().decode(result.svg);
                 const optimizedCode = new TextDecoder().decode(result.optimizedCode);
-                
+
                 if (outputEditor) {
                     outputEditor.setValue(optimizedCode);
                     outputEditor.refresh();
                 } else {
                     document.getElementById('optimizedOutput').value = optimizedCode;
                 }
-                
+
                 if (result.byteSavings) {
-                    console.log("Byte savings from WASM:", result.byteSavings);
                     svgString = injectMemorySavingsIntoSVG(svgString, result.byteSavings);
                 }
-                
+
                 document.getElementById('svgOutput').innerHTML = svgString;
-                
+
             } catch (err) {
                 console.error("Error visualizing struct:", err);
                 document.getElementById('errorOutput').textContent = 'Error: ' + err.message;
+                document.getElementById('errorOutput').style.display = 'block';
             }
         }
-        
+
         function initGoApp() {
             document.getElementById('visualizeButton').addEventListener('click', visualizeGoStruct);
             document.getElementById('visualizeButton').disabled = false;
         }
     </script>
-    
+
     <script>
         (function() {
             const go = new Go();
-            
+
             WebAssembly.instantiateStreaming(fetch('main.wasm'), go.importObject)
                 .then((result) => {
                     go.run(result.instance);
                     initGoApp();
                 })
                 .catch((err) => {
-                    document.getElementById('errorOutput').textContent = 
-                        'Failed to load WebAssembly: ' + err.message + 
+                    document.getElementById('errorOutput').textContent =
+                        'Failed to load WebAssembly: ' + err.message +
                         '\nMake sure you are running this page from a web server.';
+                    document.getElementById('errorOutput').style.display = 'block';
                 });
         })();
     </script>
