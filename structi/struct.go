@@ -185,8 +185,9 @@ func (i Info) calculateLayout(structType *types.Struct, sizes types.Sizes) []Fie
 			align = sizes.Alignof(field.Type())
 		}()
 
-		// skip fields with zero or negative size (indicates error in size calculation)
-		if size <= 0 {
+		// skip fields with negative size (indicates error in size calculation)
+		// zero-size fields (like struct{}) are valid and must be kept in the layout
+		if size < 0 {
 			fmt.Printf("warning: invalid size (%d) for field %s, skipping\n", size, field.Name())
 			continue
 		}
@@ -237,7 +238,36 @@ func (i Info) calculateLayout(structType *types.Struct, sizes types.Sizes) []Fie
 		}()
 	}
 
-	if rem := offset % structAlign; rem != 0 {
+	// Check if the last field has zero size (e.g. struct{}).
+	// Go adds padding equal to the struct's alignment in this case to prevent
+	// pointers to the zero-size field from pointing beyond the allocation.
+	lastFieldIsZeroSize := false
+	if structType.NumFields() > 0 {
+		lastField := structType.Field(structType.NumFields() - 1)
+		if lastField.Type() != nil {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						// use default if size calculation fails
+					}
+				}()
+				if sizes.Sizeof(lastField.Type()) == 0 {
+					lastFieldIsZeroSize = true
+				}
+			}()
+		}
+	}
+
+	if lastFieldIsZeroSize && offset > 0 {
+		fields = append(fields, Field{
+			Name:      "tail padding",
+			TypeName:  "",
+			Offset:    offset,
+			Size:      structAlign,
+			Align:     1,
+			IsPadding: true,
+		})
+	} else if rem := offset % structAlign; rem != 0 {
 		paddingSize := structAlign - rem
 		fields = append(fields, Field{
 			Name:      "tail padding",
@@ -341,6 +371,8 @@ func analyzeNestedStructs(node *ast.File, sizes types.Sizes, info *types.Info, s
 		originalSize := calculateTotalSize(fields)
 		optimizedSize := calculateTotalSize(optimizedFields)
 
+		// set Fields before calling WastedSpace so it can iterate over them
+		tempInfo.Fields = fields
 		wastedBytes, wastedPercent := tempInfo.WastedSpace()
 
 		structInfo := Info{
@@ -482,6 +514,8 @@ func processStructWithStrategies(name string, structType *types.Struct, strategy
 	originalSize := calculateTotalSize(fields)
 	optimizedSize := calculateTotalSize(optimizedFields)
 
+	// set Fields before calling WastedSpace so it can iterate over them
+	tempInfo.Fields = fields
 	wastedBytes, wastedPercent := tempInfo.WastedSpace()
 
 	return Info{

@@ -919,6 +919,47 @@ func TestRegression_GroupByAlignment(t *testing.T) {
 	}
 }
 
+func TestRegression_EmptyStructTailPadding(t *testing.T) {
+	src := `package test
+
+type TrailingEmpty struct {
+	A int64
+	B int64
+	C struct{}
+}
+
+type MiddleEmpty struct {
+	A int64
+	B struct{}
+	C int64
+}
+
+type MultipleTrailingEmpty struct {
+	A int64
+	B struct{}
+	C struct{}
+}
+`
+	results, err := AnalyseStructsAsStringWithStrategies(src, nil)
+	if err != nil {
+		t.Fatalf("failed to analyze: %v", err)
+	}
+
+	expected := map[string]int64{
+		"TrailingEmpty":         24, // 8 + 8 + 0 + 8 tail padding
+		"MiddleEmpty":           16, // 8 + 0 + 8, no special tail padding
+		"MultipleTrailingEmpty": 16, // 8 + 0 + 0 + 8 tail padding (last field is zero-size)
+	}
+
+	for _, r := range results {
+		if want, ok := expected[r.Name]; ok {
+			if r.OriginalSize != want {
+				t.Errorf("%s: expected original size %d, got %d", r.Name, want, r.OriginalSize)
+			}
+		}
+	}
+}
+
 func abs(x int) int {
 	if x < 0 {
 		return -x

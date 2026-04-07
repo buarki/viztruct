@@ -404,6 +404,70 @@ func TestAnalyseStructs(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "struct with trailing empty struct",
+			input: `type WithTrailingEmpty struct {
+				A int64
+				B int64
+				C struct{}
+			}`,
+			validate: func(t *testing.T, infos []Info) {
+				if len(infos) != 1 {
+					t.Fatalf("expected 1 struct, got %d", len(infos))
+				}
+				info := infos[0]
+				// Go adds 8 bytes tail padding when last field is zero-size
+				if info.OriginalSize != 24 {
+					t.Errorf("expected original size of 24 bytes, got %d", info.OriginalSize)
+				}
+				foundC := false
+				for _, f := range info.Fields {
+					if f.Name == "C" {
+						foundC = true
+						if f.Size != 0 {
+							t.Errorf("expected field C to have size 0, got %d", f.Size)
+						}
+					}
+				}
+				if !foundC {
+					t.Error("field C (struct{}) not found in layout")
+				}
+			},
+		},
+		{
+			name: "struct with non-trailing empty struct",
+			input: `type WithMiddleEmpty struct {
+				A int64
+				B struct{}
+				C int64
+			}`,
+			validate: func(t *testing.T, infos []Info) {
+				if len(infos) != 1 {
+					t.Fatalf("expected 1 struct, got %d", len(infos))
+				}
+				info := infos[0]
+				// No special tail padding when empty struct is not last
+				if info.OriginalSize != 16 {
+					t.Errorf("expected original size of 16 bytes, got %d", info.OriginalSize)
+				}
+			},
+		},
+		{
+			name: "struct with only empty struct field",
+			input: `type OnlyEmpty struct {
+				A struct{}
+			}`,
+			validate: func(t *testing.T, infos []Info) {
+				if len(infos) != 1 {
+					t.Fatalf("expected 1 struct, got %d", len(infos))
+				}
+				info := infos[0]
+				// struct{ A struct{} } has unsafe.Sizeof = 0
+				if info.OriginalSize != 0 {
+					t.Errorf("expected original size of 0 bytes, got %d", info.OriginalSize)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
