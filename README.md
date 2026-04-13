@@ -13,7 +13,7 @@
 ![Image](./docs/demo.gif)
 SVG visualization:
 
-![Image](./docs/demo.png)
+![Image](./docs/BadLayout.svg)
 
 ## CLI installation
 
@@ -59,22 +59,22 @@ sudo mv viztruct /usr/local/bin/
 ### Analyze structs from a path
 
 ```sh
-viztruct --path ./internal/samples/dumb_service.go --format=txt
+viztruct --path ./internal/samples --format=txt
 ```
 
 ### Get JSON output
 ```sh
-viztruct --path ./internal/samples/dumb_service.go --format=json
+viztruct --path ./internal/samples --format=json
 ```
 
 ### Generate SVG visualization
 ```sh
-viztruct --path ./internal/samples/dumb_service.go --format=json --svg
+viztruct --path ./internal/samples --format=json --svg
 ```
 
 ### Analyze and define the optimization strategy
 ```sh
-viztruct --path ./internal/samples/dumb_service.go --format=txt --strategies=alignment,size,group,greedy
+viztruct --path ./internal/samples --format=txt --strategies=alignment,size,group,greedy
 ```
 
 ### Show help
