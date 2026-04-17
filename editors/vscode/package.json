@@ -1,0 +1,55 @@
+{
+  "name": "viztruct",
+  "displayName": "Viztruct",
+  "description": "Analyze and optimize Go struct memory layouts from inside VSCode.",
+  "version": "0.0.1",
+  "publisher": "buarki",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/buarki/viztruct.git",
+    "directory": "editors/vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:go"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "viztruct.analyzeStruct",
+        "title": "Viztruct: Analyze struct layout"
+      }
+    ],
+    "configuration": {
+      "title": "Viztruct",
+      "properties": {
+        "viztruct.binaryPath": {
+          "type": "string",
+          "default": "viztruct",
+          "description": "Path to the viztruct binary. Defaults to `viztruct` on PATH."
+        },
+        "viztruct.timeoutSeconds": {
+          "type": "number",
+          "default": 30,
+          "description": "Per-invocation timeout for the viztruct subprocess."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}
