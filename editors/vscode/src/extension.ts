@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
@@ -59,6 +60,41 @@ function flattenInfos(parsed: unknown): Info[] {
 
 let panel: vscode.WebviewPanel | undefined;
 let currentStruct: { uri: vscode.Uri; name: string } | undefined;
+let extensionRoot: string | undefined;
+
+function bundledBinaryName(platform: NodeJS.Platform, arch: string): string | undefined {
+  const osMap: Partial<Record<NodeJS.Platform, string>> = {
+    darwin: 'darwin',
+    linux: 'linux',
+    win32: 'windows',
+  };
+  const archMap: Record<string, string> = { x64: 'amd64', arm64: 'arm64' };
+  const os = osMap[platform];
+  const a = archMap[arch];
+  if (!os || !a) return undefined;
+  const ext = os === 'windows' ? '.exe' : '';
+  return `viztruct-${os}-${a}${ext}`;
+}
+
+function resolveBinaryPath(): string {
+  const setting = vscode.workspace.getConfiguration('viztruct').get<string>('binaryPath', '').trim();
+  if (setting) return setting;
+
+  if (extensionRoot) {
+    const name = bundledBinaryName(process.platform, process.arch);
+    if (name) {
+      const bundled = path.join(extensionRoot, 'bin', name);
+      if (fs.existsSync(bundled)) {
+        // .vsix extraction may drop the exec bit on POSIX; ensure it's runnable.
+        if (process.platform !== 'win32') {
+          try { fs.chmodSync(bundled, 0o755); } catch { /* non-fatal */ }
+        }
+        return bundled;
+      }
+    }
+  }
+  return 'viztruct';
+}
 
 async function analyzeStruct(uri: vscode.Uri, structName: string): Promise<void> {
   if (uri.scheme !== 'file') {
@@ -67,9 +103,8 @@ async function analyzeStruct(uri: vscode.Uri, structName: string): Promise<void>
   }
 
   const pkgDir = path.dirname(uri.fsPath);
-  const config = vscode.workspace.getConfiguration('viztruct');
-  const binaryPath = config.get<string>('binaryPath', 'viztruct');
-  const timeoutSeconds = config.get<number>('timeoutSeconds', 30);
+  const binaryPath = resolveBinaryPath();
+  const timeoutSeconds = vscode.workspace.getConfiguration('viztruct').get<number>('timeoutSeconds', 30);
 
   const args = [
     '--path', pkgDir,
@@ -172,9 +207,8 @@ async function applyRewrite(uri: vscode.Uri, structName: string): Promise<void> 
     await doc.save();
   }
 
-  const config = vscode.workspace.getConfiguration('viztruct');
-  const binaryPath = config.get<string>('binaryPath', 'viztruct');
-  const timeoutSeconds = config.get<number>('timeoutSeconds', 30);
+  const binaryPath = resolveBinaryPath();
+  const timeoutSeconds = vscode.workspace.getConfiguration('viztruct').get<number>('timeoutSeconds', 30);
   const args = ['--rewrite', '--file', uri.fsPath, '--struct', structName];
 
   let newSource: string;
@@ -400,6 +434,7 @@ function renderHtml(info: Info, uri: vscode.Uri): string {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  extensionRoot = context.extensionPath;
   context.subscriptions.push(
     vscode.languages.registerCodeLensProvider(
       { language: 'go', scheme: 'file' },

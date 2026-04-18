@@ -31,8 +31,8 @@
       "properties": {
         "viztruct.binaryPath": {
           "type": "string",
-          "default": "viztruct",
-          "description": "Path to the viztruct binary. Defaults to `viztruct` on PATH."
+          "default": "",
+          "description": "Override for the viztruct binary path. Leave empty to use the binary bundled with the extension. Set to an absolute path (or just `viztruct` to use PATH) to override."
         },
         "viztruct.timeoutSeconds": {
           "type": "number",
@@ -46,7 +46,8 @@
     "compile": "tsc -p .",
     "watch": "tsc -w -p .",
     "typecheck": "tsc --noEmit -p .",
-    "vscode:prepublish": "npm run compile",
+    "build:binaries": "bash scripts/build-binaries.sh",
+    "vscode:prepublish": "npm run compile && npm run build:binaries",
     "package": "vsce package"
   },
   "devDependencies": {
