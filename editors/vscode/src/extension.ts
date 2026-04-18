@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { execFile } from 'child_process';
+import { execFile, execFileSync } from 'child_process';
 import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
@@ -85,15 +85,27 @@ function resolveBinaryPath(): string {
     if (name) {
       const bundled = path.join(extensionRoot, 'bin', name);
       if (fs.existsSync(bundled)) {
-        // .vsix extraction may drop the exec bit on POSIX; ensure it's runnable.
-        if (process.platform !== 'win32') {
-          try { fs.chmodSync(bundled, 0o755); } catch { /* non-fatal */ }
-        }
+        prepareBundledBinary(bundled);
         return bundled;
       }
     }
   }
   return 'viztruct';
+}
+
+// prepareBundledBinary makes a freshly-extracted bundled binary runnable:
+// ensures the exec bit on POSIX, and on macOS strips the quarantine xattr
+// that Gatekeeper checks. The binary is already ad-hoc signed by Go's
+// toolchain, so removing quarantine is sufficient — without a quarantine
+// flag, Gatekeeper does not block ad-hoc-signed binaries.
+function prepareBundledBinary(bin: string): void {
+  if (process.platform === 'win32') return;
+  try { fs.chmodSync(bin, 0o755); } catch { /* non-fatal */ }
+  if (process.platform === 'darwin') {
+    try {
+      execFileSync('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', bin], { stdio: 'ignore' });
+    } catch { /* xattr not present, or attribute wasn't set — both fine */ }
+  }
 }
 
 async function analyzeStruct(uri: vscode.Uri, structName: string): Promise<void> {
