@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/buarki/viztruct/structi"
+	"github.com/buarki/viztruct/structi/rewriter"
 	"github.com/buarki/viztruct/svg"
 )
 
@@ -387,6 +388,9 @@ func printUsage() {
 	fmt.Println("  --verbose                     Enable verbose output with detailed warnings (default false)")
 	fmt.Println("  --timeout int                 Timeout in seconds for package loading (0 for no timeout)")
 	fmt.Println("                                (default: 300)")
+	fmt.Println("  --struct string               Filter output to a single struct by exact name")
+	fmt.Println("  --rewrite                     Rewrite a struct's fields to the optimal order. Requires --file and --struct.")
+	fmt.Println("  --file string                 File containing the struct to rewrite (rewrite mode only)")
 	fmt.Println("  --version                     Show version information")
 	fmt.Println("  --help                        Show help message")
 	fmt.Println()
@@ -398,6 +402,7 @@ func printUsage() {
 	fmt.Println("  viztruct --svg --path ./internal/samples/dumb_service")
 	fmt.Println("  viztruct --max-packages=100 --timeout=60 --verbose --path /path/to/huge/project")
 	fmt.Println("  viztruct --struct=MyStruct --path ./internal/samples")
+	fmt.Println("  viztruct --rewrite --file ./internal/samples/test_structs.go --struct BadlyOrdered")
 }
 
 func main() {
@@ -412,6 +417,8 @@ func main() {
 	verboseArg := flag.Bool("verbose", false, "Enable verbose output with detailed warnings")
 	timeoutArg := flag.Int("timeout", 300, "Timeout in seconds for package loading (0 for no timeout)")
 	structArg := flag.String("struct", "", "Filter output to structs with this exact name (empty = no filter)")
+	rewriteArg := flag.Bool("rewrite", false, "Rewrite a struct's field order to the optimal layout. Requires --file and --struct. Emits the rewritten source to stdout; does not modify the file on disk.")
+	fileArg := flag.String("file", "", "File containing the struct to rewrite (rewrite mode only)")
 
 	flag.Parse()
 
@@ -451,11 +458,36 @@ func main() {
 		structi.SetTimeout(*timeoutArg)
 	}
 
+	if *rewriteArg {
+		runRewrite(*fileArg, *structArg)
+		return
+	}
+
 	if *directoryPathArg != "" {
 		analyzeFromPath(*directoryPathArg, format, *svgArg, strategyNames, *structArg)
 	} else {
 		fmt.Fprintf(os.Stderr, "error: no struct definition provided\n")
 		printUsage()
+		os.Exit(1)
+	}
+}
+
+func runRewrite(filePath, structName string) {
+	if filePath == "" || structName == "" {
+		fmt.Fprintln(os.Stderr, "error: --rewrite requires both --file and --struct")
+		os.Exit(1)
+	}
+	out, err := rewriter.RewriteStruct(filePath, structName)
+	if err != nil {
+		if _, ok := err.(*rewriter.UnsupportedError); ok {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(2)
+		}
+		fmt.Fprintf(os.Stderr, "rewrite failed: %v\n", err)
+		os.Exit(1)
+	}
+	if _, err := os.Stdout.Write(out); err != nil {
+		fmt.Fprintf(os.Stderr, "write stdout: %v\n", err)
 		os.Exit(1)
 	}
 }

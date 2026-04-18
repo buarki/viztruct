@@ -58,6 +58,7 @@ function flattenInfos(parsed: unknown): Info[] {
 }
 
 let panel: vscode.WebviewPanel | undefined;
+let currentStruct: { uri: vscode.Uri; name: string } | undefined;
 
 async function analyzeStruct(uri: vscode.Uri, structName: string): Promise<void> {
   if (uri.scheme !== 'file') {
@@ -135,20 +136,107 @@ async function analyzeStruct(uri: vscode.Uri, structName: string): Promise<void>
 }
 
 function showPanel(info: Info, uri: vscode.Uri): void {
+  currentStruct = { uri, name: info.name };
   if (!panel) {
     panel = vscode.window.createWebviewPanel(
       'viztruct',
       `Viztruct: ${info.name}`,
       vscode.ViewColumn.Beside,
-      { retainContextWhenHidden: true },
+      { retainContextWhenHidden: true, enableScripts: true },
     );
     panel.onDidDispose(() => {
       panel = undefined;
+      currentStruct = undefined;
+    });
+    panel.webview.onDidReceiveMessage(async (msg: { type?: string }) => {
+      if (msg?.type === 'apply' && currentStruct) {
+        await applyRewrite(currentStruct.uri, currentStruct.name);
+      }
     });
   }
   panel.title = `Viztruct: ${info.name}`;
   panel.webview.html = renderHtml(info, uri);
   panel.reveal(vscode.ViewColumn.Beside, true);
+}
+
+async function applyRewrite(uri: vscode.Uri, structName: string): Promise<void> {
+  const doc = await vscode.workspace.openTextDocument(uri);
+  if (doc.isDirty) {
+    const save = 'Save and rewrite';
+    const pick = await vscode.window.showWarningMessage(
+      `${path.basename(uri.fsPath)} has unsaved changes. Save before rewriting ${structName}?`,
+      { modal: true },
+      save,
+    );
+    if (pick !== save) return;
+    await doc.save();
+  }
+
+  const config = vscode.workspace.getConfiguration('viztruct');
+  const binaryPath = config.get<string>('binaryPath', 'viztruct');
+  const timeoutSeconds = config.get<number>('timeoutSeconds', 30);
+  const args = ['--rewrite', '--file', uri.fsPath, '--struct', structName];
+
+  let newSource: string;
+  try {
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Viztruct: rewriting ${structName}…` },
+      () =>
+        execFileAsync(binaryPath, args, {
+          maxBuffer: 32 * 1024 * 1024,
+          timeout: (timeoutSeconds + 5) * 1000,
+        }),
+    );
+    newSource = result.stdout;
+  } catch (err) {
+    const e = err as Omit<NodeJS.ErrnoException, 'code'> & {
+      stderr?: string;
+      code?: number | string;
+    };
+    console.error('[viztruct] rewrite failed', { binaryPath, args, error: e });
+    const reason = (e.stderr || '').trim().split('\n').slice(-3).join(' | ') || e.message || String(err);
+    if (e.code === 2) {
+      vscode.window.showWarningMessage(`Viztruct: ${reason}`);
+    } else {
+      vscode.window.showErrorMessage(`Viztruct rewrite failed — ${reason}`);
+    }
+    panel?.webview.postMessage({ type: 'applyDone', ok: false });
+    return;
+  }
+
+  if (!newSource) {
+    vscode.window.showErrorMessage('Viztruct rewrite returned empty output.');
+    panel?.webview.postMessage({ type: 'applyDone', ok: false });
+    return;
+  }
+
+  const fullRange = new vscode.Range(
+    doc.positionAt(0),
+    doc.positionAt(doc.getText().length),
+  );
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(uri, fullRange, newSource);
+  const ok = await vscode.workspace.applyEdit(edit);
+  if (!ok) {
+    vscode.window.showErrorMessage('Failed to apply rewrite to document.');
+    panel?.webview.postMessage({ type: 'applyDone', ok: false });
+    return;
+  }
+
+  panel?.webview.postMessage({ type: 'applyDone', ok: true });
+
+  const saved = await doc.save();
+  if (!saved) {
+    vscode.window.showWarningMessage(
+      `Rewrote ${structName}, but the file could not be saved. Review the diff and save manually.`,
+    );
+    return;
+  }
+
+  vscode.window.showInformationMessage(
+    `Rewrote and saved ${structName}. Cmd+Z in the editor to undo.`,
+  );
+  await analyzeStruct(uri, structName);
 }
 
 function escapeHtml(s: string | undefined | null): string {
@@ -193,6 +281,34 @@ function renderHtml(info: Info, uri: vscode.Uri): string {
   const savings = info.original_size - info.optimized_size;
   const pct = info.wasted_percent.toFixed(1);
   const rel = vscode.workspace.asRelativePath(uri);
+  const canRewrite = savings > 0;
+
+  const summary = canRewrite
+    ? `
+    <span class="badge">${info.original_size} B</span> current
+    →
+    <span class="badge">${info.optimized_size} B</span> optimized
+    <span class="badge win">saves ${savings} B</span>
+    <span class="badge">${pct}% wasted</span>`
+    : `<span class="badge">${info.original_size} B</span>`;
+
+  const layout = canRewrite
+    ? `
+  <div class="panels">
+    <div>
+      <h2>Current layout</h2>
+      ${renderTable(info.fields)}
+    </div>
+    <div>
+      <h2>Optimized layout</h2>
+      ${renderTable(info.optimized_fields)}
+    </div>
+  </div>`
+    : `
+  <div class="single-panel">
+    <h2>Layout</h2>
+    ${renderTable(info.fields)}
+  </div>`;
 
   return `<!doctype html>
 <html>
@@ -219,6 +335,7 @@ function renderHtml(info: Info, uri: vscode.Uri): string {
   }
   .badge.win { background: var(--vscode-testing-iconPassed, #89d185); color: var(--vscode-editor-background); }
   .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  .single-panel { max-width: 560px; }
   h2 { font-size: 0.95rem; margin: 0 0 0.5rem 0; text-transform: uppercase; letter-spacing: 0.05em; color: var(--vscode-descriptionForeground); }
   table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   th, td { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--vscode-panel-border); }
@@ -237,31 +354,47 @@ function renderHtml(info: Info, uri: vscode.Uri): string {
     border-radius: 2px;
   }
   button[disabled] { cursor: not-allowed; opacity: 0.5; }
+  button:not([disabled]) { cursor: pointer; }
+  button:not([disabled]):hover { background: var(--vscode-button-hoverBackground); }
+  .hint { margin-left: 0.75rem; color: var(--vscode-descriptionForeground); font-size: 0.8rem; }
+  .optimal { color: var(--vscode-testing-iconPassed, #89d185); font-size: 0.9rem; font-weight: 500; }
 </style>
 </head>
 <body>
   <h1>${escapeHtml(info.name)}</h1>
   <div class="meta">${escapeHtml(rel)}</div>
-  <div class="summary">
-    <span class="badge">${info.original_size} B</span> current
-    →
-    <span class="badge">${info.optimized_size} B</span> optimized
-    <span class="badge win">saves ${savings} B</span>
-    <span class="badge">${pct}% wasted</span>
+  <div class="summary">${summary}
   </div>
-  <div class="panels">
-    <div>
-      <h2>Current layout</h2>
-      ${renderTable(info.fields)}
-    </div>
-    <div>
-      <h2>Optimized layout</h2>
-      ${renderTable(info.optimized_fields)}
-    </div>
-  </div>
+  ${layout}
   <div class="actions">
-    <button disabled title="Coming in a future release">Apply optimization</button>
+    ${canRewrite
+      ? `<button id="applyBtn">Apply optimization</button>
+         <span class="hint">Applies as an editor edit — review the diff and save to confirm.</span>`
+      : `<div class="optimal">✓ Already optimally laid out — no action needed</div>`}
   </div>
+  <script>
+    const vscode = acquireVsCodeApi();
+    const btn = document.getElementById('applyBtn');
+    const originalLabel = btn ? btn.textContent : '';
+    if (btn && !btn.disabled) {
+      btn.addEventListener('click', () => {
+        btn.disabled = true;
+        btn.textContent = 'Rewriting…';
+        vscode.postMessage({ type: 'apply' });
+      });
+    }
+    window.addEventListener('message', (event) => {
+      const msg = event.data;
+      if (!msg || msg.type !== 'applyDone' || !btn) return;
+      if (msg.ok) {
+        btn.textContent = 'Applied — re-analyze to refresh';
+        btn.disabled = true;
+      } else {
+        btn.textContent = originalLabel;
+        btn.disabled = false;
+      }
+    });
+  </script>
 </body>
 </html>`;
 }
