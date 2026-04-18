@@ -75,6 +75,7 @@ async function analyzeStruct(uri: vscode.Uri, structName: string): Promise<void>
     '--format', 'json',
     '--skip-errors',
     '--timeout', String(timeoutSeconds),
+    '--struct', structName,
   ];
 
   let stdout: string;

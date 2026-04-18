@@ -47,7 +47,7 @@ func init() {
 }
 
 // analyzeFromPath handles analysis of structs from a directory path
-func analyzeFromPath(directoryPath string, format OutputFormat, generateSVG bool, strategyNames []string) {
+func analyzeFromPath(directoryPath string, format OutputFormat, generateSVG bool, strategyNames []string, structName string) {
 	structGroups, err := structi.AnalyseStructsAtDirectoryPath(directoryPath, strategyNames)
 	if err != nil {
 		if errI, ok := err.(*structi.Error); ok {
@@ -58,7 +58,27 @@ func analyzeFromPath(directoryPath string, format OutputFormat, generateSVG bool
 		os.Exit(1)
 	}
 
+	if structName != "" {
+		structGroups = filterByStructName(structGroups, structName)
+	}
+
 	processResults(structGroups, format, generateSVG)
+}
+
+func filterByStructName(groups [][]structi.Info, name string) [][]structi.Info {
+	out := make([][]structi.Info, 0, len(groups))
+	for _, g := range groups {
+		var kept []structi.Info
+		for _, s := range g {
+			if s.Name == name {
+				kept = append(kept, s)
+			}
+		}
+		if len(kept) > 0 {
+			out = append(out, kept)
+		}
+	}
+	return out
 }
 
 func processResults(structGroups [][]structi.Info, format OutputFormat, generateSVG bool) {
@@ -377,6 +397,7 @@ func printUsage() {
 	fmt.Println("  viztruct --strategies=\"greedy,group\" --path ./project")
 	fmt.Println("  viztruct --svg --path ./internal/samples/dumb_service")
 	fmt.Println("  viztruct --max-packages=100 --timeout=60 --verbose --path /path/to/huge/project")
+	fmt.Println("  viztruct --struct=MyStruct --path ./internal/samples")
 }
 
 func main() {
@@ -390,6 +411,7 @@ func main() {
 	skipErrorsArg := flag.Bool("skip-errors", true, "Skip packages with errors instead of failing")
 	verboseArg := flag.Bool("verbose", false, "Enable verbose output with detailed warnings")
 	timeoutArg := flag.Int("timeout", 300, "Timeout in seconds for package loading (0 for no timeout)")
+	structArg := flag.String("struct", "", "Filter output to structs with this exact name (empty = no filter)")
 
 	flag.Parse()
 
@@ -430,7 +452,7 @@ func main() {
 	}
 
 	if *directoryPathArg != "" {
-		analyzeFromPath(*directoryPathArg, format, *svgArg, strategyNames)
+		analyzeFromPath(*directoryPathArg, format, *svgArg, strategyNames, *structArg)
 	} else {
 		fmt.Fprintf(os.Stderr, "error: no struct definition provided\n")
 		printUsage()
